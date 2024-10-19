@@ -1,4 +1,5 @@
 
+#include "base/output.hh"
 #include "general_arch_db.hh"
 
 namespace gem5{
@@ -100,11 +101,13 @@ DataBase::init_db(){
 }
 
 void
-DataBase::save_db(const char *zFilename) {
-  warn("saving memdb to %s ...\n", zFilename);
+DataBase::save_db(const std::string zFilename) {
+  std::string resolved_filename = simout.resolve(zFilename);
+  const char *filename = resolved_filename.c_str();
+  warn("saving memdb to %s ...\n", filename);
   sqlite3 *disk_db;
   sqlite3_backup *pBackup;
-  int rc = sqlite3_open(zFilename, &disk_db);
+  int rc = sqlite3_open(filename, &disk_db);
   if (rc == SQLITE_OK){
     pBackup = sqlite3_backup_init(disk_db, "main", mem_db, "main");
     if (pBackup){

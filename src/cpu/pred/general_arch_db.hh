@@ -57,7 +57,7 @@ class DataBase
     sqlite3 *mem_db;
     public:
     void init_db();
-    void save_db(const char * filename);
+    void save_db(const std::string filename);
     sqlite3 *get_mem_db() {
         return mem_db;
     }

@@ -54,6 +54,7 @@
 #include "base/logging.hh"
 #include "base/output.hh"
 #include "config/the_isa.hh"
+#include "cpu/amo_recorder.hh"
 #include "cpu/base.hh"
 #include "cpu/checker/cpu.hh"
 #include "cpu/exetrace.hh"
@@ -1834,6 +1835,9 @@ Commit::updateComInstStats(const DynInstPtr &inst)
 
         if (inst->isAtomic()) {
             stats.amos[tid]++;
+            // Record PC, vaddr, cycle, whether data changed
+            cpu->getAMORecorder()->record(AMOType::AMOOR, inst->pcState().instAddr(),
+                                          inst->effAddr);
         }
     }
 

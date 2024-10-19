@@ -55,6 +55,7 @@
 #else
 #include "arch/generic/interrupts.hh"
 #include "base/statistics.hh"
+#include "cpu/amo_recorder.hh"
 #include "cpu/difftest.hh"
 #include "debug/Mwait.hh"
 #include "mem/htm.hh"
@@ -812,6 +813,12 @@ class BaseCPU : public ClockedObject
     gem5::GoldenGloablMem *goldenMemManager() { return _goldenMemManager; }
 
     void checkL1DRefill(Addr paddr, const uint8_t *refill_data, size_t size);
+
+  private:
+    AMORecorder *amoRecorder;
+    bool hasAMORecorder;
+  public:
+    AMORecorder *getAMORecorder() { return amoRecorder; }
 };
 
 } // namespace gem5

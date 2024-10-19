@@ -1,0 +1,1 @@
+#include <cpu/amo_recorder.hh>

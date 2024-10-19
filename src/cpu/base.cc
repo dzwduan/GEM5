@@ -165,7 +165,8 @@ BaseCPU::BaseCPU(const Params &p, bool is_checker)
       enableRVHDIFF(p.enable_riscv_h),
       enabledifftesInstTrace(p.enable_difftest_inst_trace),
       noHypeMode(false),
-      enableMemDedup(p.enable_mem_dedup)
+      enableMemDedup(p.enable_mem_dedup),
+      hasAMORecorder(p.has_amo_recorder)
 {
     // if Python did not provide a valid ID, do it here
     if (_cpuId == -1 ) {
@@ -248,6 +249,13 @@ BaseCPU::BaseCPU(const Params &p, bool is_checker)
                 *out_handle->stream() << std::hex << iter.first << " " << iter.second << std::endl;
             }
             simout.close(out_handle);
+        });
+    }
+
+    if (hasAMORecorder) {
+        amoRecorder = new AMORecorder("amo_recorder_" + std::to_string(_cpuId) + ".db", this);
+        registerExitCallback([this]() {
+            amoRecorder->dump();
         });
     }
 }

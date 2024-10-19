@@ -163,6 +163,8 @@ class BaseCPU(ClockedObject):
     enable_difftest_inst_trace = Param.Bool(False, "Enable difftest inst trace")
     enable_mem_dedup = Param.Bool(False, "Enable memory deduplication for difftest and golden memory")
 
+    has_amo_recorder = Param.Bool(True, "Record AMO insts")
+
     def createInterruptController(self):
         self.interrupts = [
                 self.ArchInterrupts() for i in range(self.numThreads)]

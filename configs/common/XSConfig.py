@@ -113,6 +113,7 @@ def config_difftest(cpu_list, args, sys):
             for cpu in cpu_list:
                 cpu.enable_mem_dedup = True
                 cpu.enable_difftest = True
+                cpu.enable_difftest_inst_trace = True
                 cpu.difftest_ref_so = args.difftest_ref_so
         else:
             # sys.enable_mem_dedup = True
