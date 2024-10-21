@@ -227,7 +227,7 @@ PMP::pmpcfg_from_index(uint32_t pmp_index){
     int xlen =64;
     assert(pmp_index <16);
     int cfgPerCSR = xlen / 8;
-    int cfg_csr_addr;
+    int cfg_csr_addr = 0;
     switch (pmp_index / cfgPerCSR) {
         case 0:
             cfg_csr_addr = 0;
