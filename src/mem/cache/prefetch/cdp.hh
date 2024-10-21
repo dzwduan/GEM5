@@ -48,7 +48,6 @@
 
 #include "base/sat_counter.hh"
 #include "base/types.hh"
-#include "debug/CDPVpnTable.hh"
 #include "mem/cache/base.hh"
 #include "mem/cache/prefetch/associative_set.hh"
 #include "mem/cache/prefetch/queued.hh"
@@ -87,49 +86,18 @@ class CDP : public Queued
         std::map<int, std::map<int, int>> vpns;
         std::map<int, std::map<int, int>> hotVpns;
         int counter{0};
-        int vpnMaxEntryNum{INT_MAX};
-        int realVpnEntryNum{0};
-
-        inline bool canAlloc()
-        {
-            return realVpnEntryNum < vpnMaxEntryNum;
-        }
-
-        inline void IncAllocNum()
-        {
-            realVpnEntryNum++;
-        }
-
-        inline void resetNum()
-        {
-            realVpnEntryNum = 0;
-        }
-
-        bool add(int vpn2, int vpn1)
+        void add(int vpn2, int vpn1)
         {
             counter++;
             if (vpns.find(vpn2) == vpns.end()) {
-                if (canAlloc()) {
-                    std::map<int, int> sub_map;
-                    sub_map[vpn1] = 1;
-                    vpns[vpn2] = sub_map;
-                    IncAllocNum();
-                } else {
-                    DPRINTF(CDPVpnTable, "realVpnEntryNum:%d, vpnMaxEntryNum:%d\n", realVpnEntryNum, vpnMaxEntryNum);
-                    return false;
-                }
+                std::map<int, int> sub_map;
+                sub_map[vpn1] = 1;
+                vpns[vpn2] = sub_map;
             } else if (vpns[vpn2].find(vpn1) == vpns[vpn2].end()) {
-                if (canAlloc()) {
-                    vpns[vpn2][vpn1] = 1;
-                    IncAllocNum();
-                }else {
-                    DPRINTF(CDPVpnTable, "realVpnEntryNum:%d, vpnMaxEntryNum:%d\n", realVpnEntryNum, vpnMaxEntryNum);
-                    return false;
-                }
+                vpns[vpn2][vpn1] = 1;
             } else {
                 vpns[vpn2][vpn1] += 1;
             }
-            return true;
         }
         void resetConfidence(float throttle_aggressiveness, bool enable_thro)
         {
@@ -145,7 +113,6 @@ class CDP : public Queued
             }
             counter = 0;
             vpns.clear();
-            resetNum();
         }
         bool search(int vpn2, int vpn1)
         {
@@ -162,11 +129,7 @@ class CDP : public Queued
                 hotVpns[vpn2][vpn1]--;
             }
         }
-        std::string name() { return std::string("VPNTABLE"); }
         VpnTable() { resetConfidence(2, false); }
-        VpnTable(unsigned int _vpnMaxEntryNum)
-            : vpnMaxEntryNum(_vpnMaxEntryNum)
-        { resetConfidence(2, false); }
     } vpnTable;
 
   public:
@@ -255,7 +218,6 @@ class CDP : public Queued
         statistics::Scalar missNotifyCalled;
         statistics::Scalar passedFilter;
         statistics::Scalar inserted;
-        statistics::Scalar vpnTableNoSpace;
     } cdpStats;
 };
 

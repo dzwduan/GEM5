@@ -485,8 +485,6 @@ class CDP(QueuedPrefetcher):
     use_byteorder = Param.Bool(True,"")
     throttle_aggressiveness = Param.Float(2.0,
         "A parameter to control the aggressiveness of throttling")
-    vpn_max_entry_num = Param.Unsigned(450,
-        "Max Number of Vpn table entry")
 
 class CompositeWithWorkerPrefetcher(WorkerPrefetcher):
     type = 'CompositeWithWorkerPrefetcher'

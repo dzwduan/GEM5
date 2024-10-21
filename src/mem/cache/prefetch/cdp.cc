@@ -34,7 +34,6 @@
 #include "base/stats/group.hh"
 #include "base/trace.hh"
 #include "debug/CDPUseful.hh"
-#include "debug/CDPVpnTable.hh"
 #include "debug/CDPdebug.hh"
 #include "debug/CDPdepth.hh"
 #include "debug/HWPrefetch.hh"
@@ -58,7 +57,6 @@ CDP::CDP(const CDPParams &p)
       depth_threshold(3),
       throttle_aggressiveness(p.throttle_aggressiveness),
       enable_thro(false),
-      vpnTable{p.vpn_max_entry_num},
       l3_miss_info(0, 0),
       byteOrder(p.sys->getGuestByteOrder()),
       cdpStats(this)
@@ -93,8 +91,7 @@ CDP::CDPStats::CDPStats(statistics::Group *parent)
       ADD_STAT(missNotifyCalled, statistics::units::Count::get(),
                "Number of times the prefetcher was called in missNotify"),
       ADD_STAT(passedFilter, statistics::units::Count::get(), "Number of prefetch requests passed the filter"),
-      ADD_STAT(inserted, statistics::units::Count::get(), "Number of prefetches inserted"),
-      ADD_STAT(vpnTableNoSpace, statistics::units::Count::get(), "Number of times vpn Table cannot do allocation")
+      ADD_STAT(inserted, statistics::units::Count::get(), "Number of prefetches inserted")
 {
 }
 
@@ -325,16 +322,12 @@ void
 CDP::addToVpnTable(Addr addr)
 {
     int page_offset, vpn0, vpn1, vpn2;
-    bool suc;
     vpn2 = BITS(addr, 38, 30);
     vpn1 = BITS(addr, 29, 21);
     vpn0 = BITS(addr, 20, 12);
     page_offset = BITS(addr, 11, 0);
-    suc = vpnTable.add(vpn2, vpn1);
+    vpnTable.add(vpn2, vpn1);
     vpnTable.resetConfidence(throttle_aggressiveness, enable_thro);
-    if (!suc) {
-        cdpStats.vpnTableNoSpace++;
-    }
     DPRINTF(CDPdebug, "Sv39, ADDR:%#llx, vpn2:%#llx, vpn1:%#llx, vpn0:%#llx, page offset:%#llx\n", addr, Addr(vpn2),
             Addr(vpn1), Addr(vpn0), Addr(page_offset));
 }

@@ -54,7 +54,6 @@ DebugFlag('WorkerPref')
 DebugFlag('IPCP')
 DebugFlag('CDPUseful')
 DebugFlag('CDPdebug')
-DebugFlag('CDPVpnTable')
 DebugFlag('CDPdepth')
 DebugFlag('CMCPrefetcher')
 
