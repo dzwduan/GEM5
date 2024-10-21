@@ -103,6 +103,9 @@ def build_test_system(np, args):
     if args.mem_type == 'DRAMsim3':
         assert args.dramsim3_ini is not None
 
+    for cpu in test_sys.cpu:
+        cpu.store_prefetch_train = not args.kmh_align
+    # ruby will overwrite the store_prefetch_train
     if ruby:
         test_sys._dma_ports = []
         bootmem = getattr(test_sys, '_bootmem', None)
