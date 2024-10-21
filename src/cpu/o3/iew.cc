@@ -1103,7 +1103,7 @@ IEW::classifyInstToDispQue(ThreadID tid)
             ++iewStats.dispatchedInsts;
             dispQue[id].push_back(inst);
 
-            if (!inst->isNop()) {
+            if (!inst->isNop() && !inst->isEliminated()) {
                 scheduler->addProducer(inst);
             }
 
@@ -1244,7 +1244,7 @@ IEW::dispatchInstFromDispQue(ThreadID tid)
                 inst->setCanCommit();
                 instQueue.insertBarrier(inst);
                 add_to_iq = false;
-            } else if (inst->isNop()) {
+            } else if (inst->isNop() || inst->isEliminated()) {
                 DPRINTF(IEW, "[tid:%i] Dispatch: Nop instruction encountered, "
                         "skipping.\n", tid);
 
@@ -1623,12 +1623,12 @@ IEW::writebackInsts()
 
             for (int i = 0; i < inst->numDestRegs(); i++) {
                 // Mark register as ready if not pinned
-                if (inst->renamedDestIdx(i)->
+                if (inst->renamedDestIdx(i).PhyReg()->
                         getNumPinnedWritesToComplete() == 0) {
                     DPRINTF(IEW,"Setting Destination Register %i (%s)\n",
-                            inst->renamedDestIdx(i)->index(),
-                            inst->renamedDestIdx(i)->className());
-                    scoreboard->setReg(inst->renamedDestIdx(i));
+                            inst->renamedDestIdx(i).PhyReg()->index(),
+                            inst->renamedDestIdx(i).PhyReg()->className());
+                    scoreboard->setReg(inst->renamedDestIdx(i).PhyReg());
                 }
             }
 

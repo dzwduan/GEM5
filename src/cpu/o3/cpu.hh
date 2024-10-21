@@ -329,7 +329,9 @@ class CPU : public BaseCPU
     void setMiscReg(int misc_reg, RegVal val, ThreadID tid);
 
     RegVal getReg(PhysRegIdPtr phys_reg);
+    RegVal getReg(RenameEntry phys_reg);
     void getReg(PhysRegIdPtr phys_reg, void *val);
+    void getReg(RenameEntry phys_reg, void *val);
     void *getWritableReg(PhysRegIdPtr phys_reg);
 
     void setReg(PhysRegIdPtr phys_reg, RegVal val);

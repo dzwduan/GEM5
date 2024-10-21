@@ -255,7 +255,7 @@ CPU::CPU(const BaseO3CPUParams &params)
         memset(ones, 0xff, RiscvISA::VLENB);
         setArchReg(RiscvISA::VecOnesReg, ones, tid);
     }
-    vecOnesPhysRegId = commitRenameMap[0].lookup(RiscvISA::VecOnesReg);
+    vecOnesPhysRegId = commitRenameMap[0].lookup(RiscvISA::VecOnesReg).PhyReg();
 
     rename.setRenameMap(renameMap);
     commit.setRenameMap(commitRenameMap);
@@ -1087,10 +1087,62 @@ CPU::getReg(PhysRegIdPtr phys_reg)
     return regFile.getReg(phys_reg);
 }
 
+RegVal
+CPU::getReg(RenameEntry phys_reg)
+{
+    switch (phys_reg.PhyReg()->classValue()) {
+      case IntRegClass:
+        cpuStats.intRegfileReads++;
+        break;
+      case FloatRegClass:
+        cpuStats.fpRegfileReads++;
+        break;
+      case CCRegClass:
+        cpuStats.ccRegfileReads++;
+        break;
+      case VecRegClass:
+      case VecElemClass:
+        cpuStats.vecRegfileReads++;
+        break;
+      case VecPredRegClass:
+        cpuStats.vecPredRegfileReads++;
+        break;
+      default:
+        break;
+    }
+    return regFile.getReg(phys_reg);
+}
+
 void
 CPU::getReg(PhysRegIdPtr phys_reg, void *val)
 {
     switch (phys_reg->classValue()) {
+      case IntRegClass:
+        cpuStats.intRegfileReads++;
+        break;
+      case FloatRegClass:
+        cpuStats.fpRegfileReads++;
+        break;
+      case CCRegClass:
+        cpuStats.ccRegfileReads++;
+        break;
+      case VecRegClass:
+      case VecElemClass:
+        cpuStats.vecRegfileReads++;
+        break;
+      case VecPredRegClass:
+        cpuStats.vecPredRegfileReads++;
+        break;
+      default:
+        break;
+    }
+    regFile.getReg(phys_reg, val);
+}
+
+void
+CPU::getReg(RenameEntry phys_reg, void *val)
+{
+    switch (phys_reg.PhyReg()->classValue()) {
       case IntRegClass:
         cpuStats.intRegfileReads++;
         break;
@@ -1184,35 +1236,35 @@ CPU::setReg(PhysRegIdPtr phys_reg, const void *val)
 RegVal
 CPU::getArchReg(const RegId &reg, ThreadID tid)
 {
-    PhysRegIdPtr phys_reg = commitRenameMap[tid].lookup(reg);
+    RenameEntry phys_reg = commitRenameMap[tid].lookup(reg);
     return regFile.getReg(phys_reg);
 }
 
 void
 CPU::getArchReg(const RegId &reg, void *val, ThreadID tid)
 {
-    PhysRegIdPtr phys_reg = commitRenameMap[tid].lookup(reg);
+    RenameEntry phys_reg = commitRenameMap[tid].lookup(reg);
     regFile.getReg(phys_reg, val);
 }
 
 void *
 CPU::getWritableArchReg(const RegId &reg, ThreadID tid)
 {
-    PhysRegIdPtr phys_reg = commitRenameMap[tid].lookup(reg);
+    PhysRegIdPtr phys_reg = commitRenameMap[tid].lookup(reg).PhyReg();
     return regFile.getWritableReg(phys_reg);
 }
 
 void
 CPU::setArchReg(const RegId &reg, RegVal val, ThreadID tid)
 {
-    PhysRegIdPtr phys_reg = commitRenameMap[tid].lookup(reg);
+    PhysRegIdPtr phys_reg = commitRenameMap[tid].lookup(reg).PhyReg();
     regFile.setReg(phys_reg, val);
 }
 
 void
 CPU::setArchReg(const RegId &reg, const void *val, ThreadID tid)
 {
-    PhysRegIdPtr phys_reg = commitRenameMap[tid].lookup(reg);
+    PhysRegIdPtr phys_reg = commitRenameMap[tid].lookup(reg).PhyReg();
     regFile.setReg(phys_reg, val);
 }
 
@@ -1624,7 +1676,7 @@ CPU::readArchIntReg(int reg_idx, ThreadID tid)
 
     cpuStats.intRegfileReads++;
     PhysRegIdPtr phys_reg =
-        commitRenameMap[tid].lookup(RegId(IntRegClass, reg_idx));
+        commitRenameMap[tid].lookup(RegId(IntRegClass, reg_idx)).PhyReg();
 
     DPRINTF(Commit, "Get map: x%i -> p%i\n", reg_idx, phys_reg->flatIndex());
 
@@ -1636,7 +1688,7 @@ CPU::readArchFloatReg(int reg_idx, ThreadID tid)
 {
     cpuStats.fpRegfileReads++;
     PhysRegIdPtr phys_reg =
-        commitRenameMap[tid].lookup(RegId(FloatRegClass, reg_idx));
+        commitRenameMap[tid].lookup(RegId(FloatRegClass, reg_idx)).PhyReg();
     DPRINTF(Commit, "Get map: f%i -> p%i\n", reg_idx, phys_reg->flatIndex());
 
     return regFile.getReg(phys_reg);
@@ -1647,7 +1699,7 @@ CPU::readArchVecReg(int reg_idx, uint64_t *val,ThreadID tid)
 {
     cpuStats.vecRegfileReads++;
     PhysRegIdPtr phys_reg =
-        commitRenameMap[tid].lookup(RegId(VecRegClass, reg_idx));
+        commitRenameMap[tid].lookup(RegId(VecRegClass, reg_idx)).PhyReg();
     DPRINTF(Commit, "Get map: v%i -> p%i\n", reg_idx, phys_reg->flatIndex());
 
     regFile.getReg(phys_reg, val);
