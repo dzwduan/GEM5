@@ -186,7 +186,7 @@ IssueQue::checkScoreboard(const DynInstPtr& inst)
                 panic("dst is not load");
             }
             scheduler->loadCancel(dst_inst);
-            DPRINTF(Schedule, "[sn %lu] %s can't get data from bypassNetwork, dst inst: %s\n",
+            DPRINTF(Schedule, "[sn:%llu] %s can't get data from bypassNetwork, dst inst: %s\n",
                     inst->seqNum, inst->srcRegIdx(i), dst_inst->genDisassembly());
             return false;
         }
@@ -199,7 +199,7 @@ void
 IssueQue::addToFu(const DynInstPtr& inst)
 {
     if (inst->isIssued()) [[unlikely]] {
-        panic("%s [sn %lu] has alreayd been issued\n", enums::OpClassStrings[inst->opClass()], inst->seqNum);
+        panic("%s [sn:%llu] has alreayd been issued\n", enums::OpClassStrings[inst->opClass()], inst->seqNum);
     }
     inst->setIssued();
     scheduler->addToFU(inst);
@@ -239,7 +239,7 @@ IssueQue::retryMem(const DynInstPtr& inst)
 {
     assert(!inst->isNonSpeculative());
     iqstats->retryMem++;
-    DPRINTF(Schedule, "retry %s [sn %lu]\n", enums::OpClassStrings[inst->opClass()], inst->seqNum);
+    DPRINTF(Schedule, "retry %s [sn:%llu]\n", enums::OpClassStrings[inst->opClass()], inst->seqNum);
     // scheduler->loadCancel(inst);
     scheduler->addToFU(inst);
 }
@@ -248,7 +248,7 @@ void
 IssueQue::markMemDepDone(const DynInstPtr& inst)
 {
     assert(inst->isMemRef());
-    DPRINTF(Schedule, "[sn %lu] has solved memdependency\n", inst->seqNum);
+    DPRINTF(Schedule, "[sn:%llu] has solved memdependency\n", inst->seqNum);
     inst->setMemDepDone();
     addIfReady(inst);
 }
@@ -265,7 +265,7 @@ IssueQue::wakeUpDependents(const DynInstPtr& inst, bool speculative)
             continue;
         }
 
-        DPRINTF(Schedule, "was %s woken by p%lu [sn %lu]\n", speculative ? "spec" : "wb", dst->flatIndex(),
+        DPRINTF(Schedule, "was %s woken by p%lu [sn:%llu]\n", speculative ? "spec" : "wb", dst->flatIndex(),
                 inst->seqNum);
         for (auto& it : subDepGraph[dst->flatIndex()]) {
             int srcIdx = it.first;
@@ -279,7 +279,7 @@ IssueQue::wakeUpDependents(const DynInstPtr& inst, bool speculative)
                 consumer->checkOldVdElim();
             }
 
-            DPRINTF(Schedule, "[sn %lu] src%d was woken\n", consumer->seqNum, srcIdx);
+            DPRINTF(Schedule, "[sn:%llu] src%d was woken\n", consumer->seqNum, srcIdx);
             addIfReady(consumer);
         }
 
@@ -308,7 +308,7 @@ IssueQue::addIfReady(const DynInstPtr& inst)
             }
         }
 
-        DPRINTF(Schedule, "[sn %lu] add to readyInstsQue\n", inst->seqNum);
+        DPRINTF(Schedule, "[sn:%llu] add to readyInstsQue\n", inst->seqNum);
         inst->clearCancel();
         if (!inst->inReadyQ()) {
             inst->setInReadyQ();
@@ -333,7 +333,7 @@ IssueQue::selectInst()
         }
         if (!readyQ->empty()) {
             auto inst = readyQ->top();
-            DPRINTF(Schedule, "[sn %ld] was selected\n", inst->seqNum);
+            DPRINTF(Schedule, "[sn:%llu] was selected\n", inst->seqNum);
             scheduler->insertSlot(inst);
             selectQ.push_back(std::make_pair(pi, inst));
             inst->clearInReadyQ();
@@ -350,15 +350,15 @@ IssueQue::scheduleInst()
         auto& pi = info.first;  // port id
         auto& inst = info.second;
         if (inst->canceled()) {
-            DPRINTF(Schedule, "[sn %ld] was canceled\n", inst->seqNum);
+            DPRINTF(Schedule, "[sn:%llu] was canceled\n", inst->seqNum);
         } else if (inst->arbFailed()) {
-            DPRINTF(Schedule, "[sn %ld] arbitration failed, retry\n", inst->seqNum);
+            DPRINTF(Schedule, "[sn:%llu] arbitration failed, retry\n", inst->seqNum);
             iqstats->arbFailed++;
             assert(inst->readyToIssue());
             inst->setInReadyQ();
             readyQclassify[inst->opClass()]->push(inst);  // retry
         } else [[likely]] {
-            DPRINTF(Schedule, "[sn %ld] no conflict, scheduled\n", inst->seqNum);
+            DPRINTF(Schedule, "[sn:%llu] no conflict, scheduled\n", inst->seqNum);
             iqstats->portissued[pi]++;
             inst->clearInIQ();
             toIssue->push(inst);
@@ -420,8 +420,8 @@ IssueQue::insert(const DynInstPtr& inst)
         instNumInsert++;
     }
 
-    DPRINTF(Schedule, "[sn %lu] %s insert into %s\n", inst->seqNum, enums::OpClassStrings[inst->opClass()], iqname);
-    DPRINTF(Schedule, "[sn %lu] instNum++\n", inst->seqNum);
+    DPRINTF(Schedule, "[sn:%llu] %s insert into %s\n", inst->seqNum, enums::OpClassStrings[inst->opClass()], iqname);
+    DPRINTF(Schedule, "[sn:%llu] instNum++\n", inst->seqNum);
     inst->issueQue = this;
     instList.emplace_back(inst);
     bool addToDepGraph = false;
@@ -431,7 +431,7 @@ IssueQue::insert(const DynInstPtr& inst)
             if (scheduler->scoreboard[src->flatIndex()] || scheduler->earlyScoreboard[src->flatIndex()]) {
                 inst->markSrcRegReady(i);
             } else {
-                DPRINTF(Schedule, "[sn %lu] src p%d add to depGraph\n", inst->seqNum, src->flatIndex());
+                DPRINTF(Schedule, "[sn:%llu] src p%d add to depGraph\n", inst->seqNum, src->flatIndex());
                 subDepGraph[src->flatIndex()].push_back({i, inst});
                 addToDepGraph = true;
             }
@@ -455,7 +455,7 @@ IssueQue::insert(const DynInstPtr& inst)
 void
 IssueQue::insertNonSpec(const DynInstPtr& inst)
 {
-    DPRINTF(Schedule, "[sn %lu] insertNonSpec into %s\n", inst->seqNum, iqname);
+    DPRINTF(Schedule, "[sn:%llu] insertNonSpec into %s\n", inst->seqNum, iqname);
     inst->issueQue = this;
     if (inst->isMemRef()) {
         scheduler->memDepUnit[inst->threadNumber].insertNonSpec(inst);
@@ -639,7 +639,7 @@ Scheduler::resetDepGraph(uint64_t numPhysRegs)
 void
 Scheduler::addToFU(const DynInstPtr& inst)
 {
-    DPRINTF(Schedule, "%s [sn %lu] add to FUs\n", enums::OpClassStrings[inst->opClass()], inst->seqNum);
+    DPRINTF(Schedule, "%s [sn:%llu] add to FUs\n", enums::OpClassStrings[inst->opClass()], inst->seqNum);
     instsToFu.push_back(inst);
 }
 
@@ -666,14 +666,14 @@ Scheduler::issueAndSelect()
         auto& slot = intSlot.top();
         slot.inst->setArbFailed();
         intSlotOccupied -= slot.resourceDemand;
-        DPRINTF(Schedule, "[sn %lu] remove from slot\n", slot.inst->seqNum);
+        DPRINTF(Schedule, "[sn:%llu] remove from slot\n", slot.inst->seqNum);
         intSlot.pop();
     }
     while (fpSlotOccupied > fpSlotNum) {
         auto& slot = fpSlot.top();
         slot.inst->setArbFailed();
         fpSlotOccupied -= slot.resourceDemand;
-        DPRINTF(Schedule, "[sn %lu] remove from slot\n", slot.inst->seqNum);
+        DPRINTF(Schedule, "[sn:%llu] remove from slot\n", slot.inst->seqNum);
         fpSlot.pop();
     }
 
@@ -731,7 +731,7 @@ Scheduler::getInstByDstReg(RegIndex flatIdx)
 void
 Scheduler::addProducer(const DynInstPtr& inst)
 {
-    DPRINTF(Schedule, "[sn %lu] addProdecer\n", inst->seqNum);
+    DPRINTF(Schedule, "[sn:%llu] addProdecer\n", inst->seqNum);
     for (int i = 0; i < inst->numDestRegs(); i++) {
         auto dst = inst->renamedDestIdx(i);
         if (dst->isFixedMapping()) {
@@ -762,7 +762,7 @@ Scheduler::insert(const DynInstPtr& inst)
     }
 
     assert(inserted);
-    DPRINTF(Dispatch, "[sn %lu] dispatch: %s\n", inst->seqNum, inst->staticInst->disassemble(0));
+    DPRINTF(Dispatch, "[sn:%llu] dispatch: %s\n", inst->seqNum, inst->staticInst->disassemble(0));
 }
 
 void
@@ -797,7 +797,7 @@ Scheduler::specWakeUpDependents(const DynInstPtr& inst, IssueQue* from_issue_que
             wakeDelay -= diff;
         }
 
-        DPRINTF(Schedule, "[sn %lu] %s create wakeupEvent to %s, delay %d cycles\n", inst->seqNum,
+        DPRINTF(Schedule, "[sn:%llu] %s create wakeupEvent to %s, delay %d cycles\n", inst->seqNum,
                 from_issue_queue->getName(), to->getName(), wakeDelay);
         if (wakeDelay == 0) {
             to->wakeUpDependents(inst, true);
@@ -844,7 +844,7 @@ Scheduler::insertSlot(const DynInstPtr& inst)
         intSlotOccupied += needed;
         intSlot.push(Slot(priority, needed, inst));
     }
-    DPRINTF(Schedule, "[sn %lu] insert slot, priority: %u, needed: %u\n", inst->seqNum, priority, needed);
+    DPRINTF(Schedule, "[sn:%llu] insert slot, priority: %u, needed: %u\n", inst->seqNum, priority, needed);
 }
 
 void
@@ -853,7 +853,7 @@ Scheduler::loadCancel(const DynInstPtr& inst)
     if (inst->canceled()) {
         return;
     }
-    DPRINTF(Schedule, "[sn %lu] %s cache miss, cancel consumers\n", inst->seqNum,
+    DPRINTF(Schedule, "[sn:%llu] %s cache miss, cancel consumers\n", inst->seqNum,
             enums::OpClassStrings[inst->opClass()]);
     inst->setCancel();
     if (inst->issueQue) {
@@ -876,7 +876,7 @@ Scheduler::loadCancel(const DynInstPtr& inst)
                     auto& depInst = it.second;
                     if (depInst->readySrcIdx(srcIdx) && depInst->renamedSrcIdx(srcIdx) != cpu->vecOnesPhysRegId) {
                         assert(!depInst->isIssued());
-                        DPRINTF(Schedule, "cancel [sn %lu], clear src p%d ready\n", depInst->seqNum,
+                        DPRINTF(Schedule, "cancel [sn:%llu], clear src p%d ready\n", depInst->seqNum,
                                 depInst->renamedSrcIdx(srcIdx)->flatIndex());
                         depInst->setCancel();
                         iq->iqstats->canceledInst++;
@@ -904,7 +904,7 @@ Scheduler::loadCancel(const DynInstPtr& inst)
 void
 Scheduler::writebackWakeup(const DynInstPtr& inst)
 {
-    DPRINTF(Schedule, "[sn %lu] was writeback\n", inst->seqNum);
+    DPRINTF(Schedule, "[sn:%llu] was writeback\n", inst->seqNum);
     inst->setWriteback();  // clear in issueQue
     for (int i = 0; i < inst->numDestRegs(); i++) {
         auto dst = inst->renamedDestIdx(i);
@@ -924,7 +924,7 @@ Scheduler::bypassWriteback(const DynInstPtr& inst)
     if (inst->issueportid >= 0) {
         inst->issueQue->portBusy[inst->issueportid] = 0;
     }
-    DPRINTF(Schedule, "[sn %lu] bypass write\n", inst->seqNum);
+    DPRINTF(Schedule, "[sn:%llu] bypass write\n", inst->seqNum);
     for (int i = 0; i < inst->numDestRegs(); i++) {
         auto dst = inst->renamedDestIdx(i);
         if (dst->isFixedMapping()) {

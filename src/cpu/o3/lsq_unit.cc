@@ -1235,7 +1235,7 @@ LSQUnit::offloadToStoreBuffer()
             request->mainReq()->isRelease() ||
             request->mainReq()->isStrictlyOrdered() ||
             inst->isStoreConditional()) {
-            DPRINTF(StoreBuffer, "Find atomic/SC store[sn %llu]\n", storeWBIt->instruction()->seqNum);
+            DPRINTF(StoreBuffer, "Find atomic/SC store [sn:%llu]\n", storeWBIt->instruction()->seqNum);
             if (!(storeWBIt.idx() == storeQueue.head())) {
                 DPRINTF(StoreBuffer, "atomic/SC store waiting\n");
                 break;

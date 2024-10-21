@@ -689,7 +689,7 @@ InstructionQueue::scheduleReadyInsts()
         uint32_t op_latency = scheduler->getOpLatency(issued_inst);
         execLatencyCheck(issued_inst, op_latency);
         assert(op_latency < 64);
-        DPRINTF(Schedule, "[sn %lu] start execute %u cycles\n", issued_inst->seqNum, op_latency);
+        DPRINTF(Schedule, "[sn:%llu] start execute %u cycles\n", issued_inst->seqNum, op_latency);
         if (op_latency <= 1) {
             i2e_info->size++;
             instsToExecute.push_back(issued_inst);

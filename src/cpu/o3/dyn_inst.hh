@@ -1049,16 +1049,16 @@ class DynInst : public ExecContext, public RefCounted
             bool set = vecinst->vmi.rs < RiscvISA::vtype_VLMAX(vecinst->machInst.vtype8);
             bool eleFullCover = vecinst->vmi.re <= vl;
             bool oldVdElim = set && ((vl > 0 && vecinst->vma && vecinst->vta) || (vecinst->vma && eleFullCover));
-            DPRINTF(Schedule, "[sn %llu] vl: %llu, rs: %llu, re: %llu, set: %d, eleFullCover: %d, oldVdElim: %d\n",
+            DPRINTF(Schedule, "[sn:%llu] vl: %llu, rs: %llu, re: %llu, set: %d, eleFullCover: %d, oldVdElim: %d\n",
                     seqNum, vl, vecinst->vmi.rs, vecinst->vmi.re, set, eleFullCover, oldVdElim);
             if (oldVdElim) {
-                DPRINTF(Schedule, "[sn %llu] old vd elim\n", seqNum);
+                DPRINTF(Schedule, "[sn:%llu] old vd elim\n", seqNum);
                 renameSrcReg(vecinst->oldDstIdx, cpu->vecOnesPhysRegId);
                 if (!readySrcIdx(vecinst->oldDstIdx)) {
                     markSrcRegReady(vecinst->oldDstIdx);
                 }
             } else {
-                DPRINTF(Schedule, "[sn %llu] assert failed\n", seqNum);
+                DPRINTF(Schedule, "[sn:%llu] assert failed\n", seqNum);
                 assert(srcRegIdx(vecinst->oldDstIdx) != RiscvISA::VecOnesReg);
             }
             return oldVdElim;
