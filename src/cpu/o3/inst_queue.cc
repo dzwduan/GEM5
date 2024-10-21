@@ -522,7 +522,10 @@ bool
 InstructionQueue::execLatencyCheck(const DynInstPtr& inst, uint32_t& op_latency)
 {
     // Leading zero count
-    auto lzc = [](RegVal val) {
+    auto clz = [](RegVal val) {
+#if defined(__GNUC__) || defined(__clang__)
+        return val == 0 ? 64 : __builtin_clzll(val);
+#else
         for (int i = 0; i < 64; i++) {
             if (val & (0x1lu << 63)) {
                 return i;
@@ -530,7 +533,10 @@ InstructionQueue::execLatencyCheck(const DynInstPtr& inst, uint32_t& op_latency)
             val <<= 1;
         }
         return 64;
+#endif
     };
+
+
     RegVal rs1;
     RegVal rs2;
     int delay_;
@@ -542,14 +548,14 @@ InstructionQueue::execLatencyCheck(const DynInstPtr& inst, uint32_t& op_latency)
                                       inst->threadNumber);
             // rs1 / rs2 : 0x80/0x8 ,delay_ = 4
             // get the leading zero difference between rs1 and rs2 (rs1 > rs2)
-            delay_ = std::max(lzc(std::labs(rs2)) - lzc(std::labs(rs1)), 0);
+            delay_ = std::max(clz(rs2) - clz(rs1), 0);
             if (rs2 == 1) {
                 // rs1 / 1 = rs1
                 op_latency = 6;
             } else if (rs1 == rs2) {
                 // rs1 / rs2 = 1 rem 0
                 op_latency = 8;
-            } else if (lzc(std::labs(rs2)) - lzc(std::labs(rs1)) < 0) {
+            } else if (clz(rs2) - clz(rs1) < 0) {
                 // if rs2 > rs1 then rs1/rs2 = 0 rem rs1
                 op_latency = 6;
             } else {
