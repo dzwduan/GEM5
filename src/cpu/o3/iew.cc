@@ -1464,7 +1464,7 @@ IEW::executeInsts()
 
         updateExeInstStats(inst);
 
-        if (Debug::IEW) {
+        if (debug::IEW) {
             inst->printDisassemblyAndResult(cpu->name());
         }
 
