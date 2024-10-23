@@ -1841,6 +1841,10 @@ Commit::updateComInstStats(const DynInstPtr &inst)
         }
     }
 
+    if (inst->isCondCtrl()) {
+        cpu->getAMORecorder()->update_bra(inst->pcState().instAddr(), curTick());
+    }
+
     if (inst->isFullMemBarrier()) {
         stats.membars[tid]++;
     }
