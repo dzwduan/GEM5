@@ -55,6 +55,7 @@ namespace prefetch
 CDP::CDP(const CDPParams &p)
     : Queued(p),
       depth_threshold(3),
+      degree(2),
       throttle_aggressiveness(p.throttle_aggressiveness),
       enable_thro(false),
       l3_miss_info(0, 0),
@@ -137,6 +138,13 @@ CDP::calculatePrefetch(const PrefetchInfo &pfi, std::vector<AddrPriority> &addre
                 vpn1 = BITS(pt_addr, 29, 21);
                 vpnTable.update(vpn2, vpn1, enable_thro);
                 sendPFWithFilter(blockAddress(pt_addr), addresses, 30, PrefetchSourceType::CDP, 1);
+                for (int i = 1; i < degree; i++) {
+                    if (getCdpTrueAccuracy() > 0.05) {
+                        Addr next_pf_addr = blockAddress(pt_addr) + (i * 0x40);
+                        vpnTable.update(BITS(next_pf_addr, 38, 30), BITS(next_pf_addr, 29, 21), enable_thro);
+                        sendPFWithFilter(next_pf_addr, addresses, 1, PrefetchSourceType::CDP, 1);
+                    }
+                }
                 cdpStats.triggeredInCalcPf++;
             }
         }
@@ -165,6 +173,7 @@ CDP::notifyWithData(const PacketPtr &pkt, bool is_l1_use, std::vector<AddrPriori
     assert(cache);
     uint64_t test_addr = 0;
     std::vector<uint64_t> addrs;
+    float trueAccuracy = getCdpTrueAccuracy();
     if (pkt->hasData() && pkt->req->hasVaddr()) {
         DPRINTF(CDPdebug, "Notify with data received for addr: %#llx, pkt size: %lu\n", pkt->req->getVaddr(),
                 pkt->getSize());
@@ -205,11 +214,6 @@ CDP::notifyWithData(const PacketPtr &pkt, bool is_l1_use, std::vector<AddrPriori
                         CDP::notifyFill(const PacketPtr &pkt)\n");
         };
 
-        float trueAccuracy = 1;
-        if (prefetchStatsPtr->pfIssued_srcs[PrefetchSourceType::CDP].value() > 100) {
-            trueAccuracy = (prefetchStatsPtr->pfUseful_srcs[PrefetchSourceType::CDP].value() * 1.0) /
-                           (prefetchStatsPtr->pfIssued_srcs[PrefetchSourceType::CDP].value());
-        }
         if (hasHintDownStream())
             l3_miss_info = hintDownStream->rxMembusRatio(parentRid);
         if (mpki < 1)
@@ -266,10 +270,13 @@ CDP::notifyWithData(const PacketPtr &pkt, bool is_l1_use, std::vector<AddrPriori
                 vpnTable.update(vpn2, vpn1, enable_thro);
                 sendPFWithFilter(blockAddress(test_addr2), addresses, 29 + next_depth, PrefetchSourceType::CDP,
                                  next_depth);
-                if (trueAccuracy > 0.05) {
-                    vpnTable.update(vpn2, vpn1, enable_thro);
-                    sendPFWithFilter(blockAddress(test_addr2) + 0x40, addresses, 1, PrefetchSourceType::CDP,
+                for (int i = 1; i < degree; i++) {
+                    if (trueAccuracy > 0.05) {
+                        Addr next_pf_addr = blockAddress(test_addr2) + (i * 0x40);
+                        vpnTable.update(BITS(next_pf_addr, 38, 30), BITS(next_pf_addr, 29, 21), enable_thro);
+                        sendPFWithFilter(next_pf_addr, addresses, 1, PrefetchSourceType::CDP,
                                      next_depth);
+                    }
                 }
                 cdpStats.triggeredInRxNotify++;
                 sentCount++;

@@ -75,6 +75,7 @@ class CDP : public Queued
     std::vector<bool> enable_prf_filter;
     std::vector<bool> enable_prf_filter2;
     int depth_threshold;
+    int degree;
     float throttle_aggressiveness;
     bool enable_thro;
     /** Byte order used to access the cache */
@@ -170,6 +171,15 @@ class CDP : public Queued
     void calculatePrefetch(const PrefetchInfo &pfi, std::vector<AddrPriority> &addresses) override;
 
     void addToVpnTable(Addr vaddr);
+
+    float getCdpTrueAccuracy() const {
+        float trueAccuracy = 1;
+        if (prefetchStatsPtr->pfIssued_srcs[PrefetchSourceType::CDP].value() > 100) {
+            trueAccuracy = (prefetchStatsPtr->pfUseful_srcs[PrefetchSourceType::CDP].value() * 1.0) /
+                            (prefetchStatsPtr->pfIssued_srcs[PrefetchSourceType::CDP].value());
+        }
+        return trueAccuracy;
+    }
 
     std::vector<Addr> scanPointer(Addr addr, std::vector<uint64_t> addrs)
     {
