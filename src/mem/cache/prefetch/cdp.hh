@@ -48,6 +48,7 @@
 
 #include "base/sat_counter.hh"
 #include "base/types.hh"
+#include "debug/CDPHotVpns.hh"
 #include "mem/cache/base.hh"
 #include "mem/cache/prefetch/associative_set.hh"
 #include "mem/cache/prefetch/queued.hh"
@@ -104,16 +105,22 @@ class CDP : public Queued
         {
             if (counter < 128)
                 return;
-            hotVpns.clear();
+            // hotVpns = hotVpns * 0.5 + vpns * 0.5
+            for (auto pair2 : hotVpns) {
+                for (auto pair1 : pair2.second) {
+                    hotVpns[pair2.first][pair1.first] /= 2;
+                }
+            }
             for (auto pair2 : vpns) {
                 for (auto pair1 : pair2.second) {
                     if (pair1.second > counter / 16 || enable_thro) {
-                        hotVpns[pair2.first][pair1.first] = pair1.second * throttle_aggressiveness;
+                        hotVpns[pair2.first][pair1.first] += (pair1.second * throttle_aggressiveness) / 2;
                     }
                 }
             }
             counter = 0;
             vpns.clear();
+            showHotVpns();
         }
         bool search(int vpn2, int vpn1)
         {
@@ -130,6 +137,17 @@ class CDP : public Queued
                 hotVpns[vpn2][vpn1]--;
             }
         }
+        void showHotVpns()
+        {
+            if (GEM5_UNLIKELY(::gem5::debug::CDPHotVpns)) {
+                for (auto pair2 : hotVpns) {
+                    for (auto pair1 : pair2.second) {
+                        DPRINTFN("Table entry(%#llx, %#llx): %#llx\n", pair2.first, pair1.first, pair1.second);
+                    }
+                }
+            }
+        }
+        std::string name() { return std::string("VPNTABLE"); }
         VpnTable() { resetConfidence(2, false); }
     } vpnTable;
 
