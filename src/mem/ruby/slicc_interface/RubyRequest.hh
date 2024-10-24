@@ -230,6 +230,8 @@ class RubyRequest : public Message
     {
         return m_pkt->req->getXsMetadata();
     }
+    int getAMOType() const { return m_pkt->req->getAMOType(); }
+    int getCPUId() const { return m_pkt->req->getCPUId(); }
 
     void setWriteMask(uint32_t offset, uint32_t len,
         std::vector< std::pair<int,AtomicOpFunctor*>> atomicOps);

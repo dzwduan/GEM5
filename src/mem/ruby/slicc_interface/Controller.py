@@ -89,3 +89,7 @@ class RubyController(ClockedObject):
     downstream_destinations = VectorParam.RubyController(
         [], "Possible destinations for requests sent towards memory"
     )
+
+    use_home_recorder = Param.Bool(
+        False, "Enable the home cache recorder for this controller"
+    )

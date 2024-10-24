@@ -2,6 +2,7 @@
 #define __CPU_AMO_RECORDER_HH__
 
 #include <string>
+#include <unordered_set>
 #include <vector>
 
 #include <base/statistics.hh>
@@ -20,7 +21,9 @@ enum AMOType
     AMOOR = 30,
     AMOXOR = 40,
     AMOOTHER = 50,
-    LRSC = 100
+    LRSC = 100,
+    LOAD = 200,
+    STORE = 201
 };
 
 class BaseCPU;
@@ -37,6 +40,9 @@ class AMORecorder
     // std::vector<Addr> prev_st;
     std::vector<std::pair<Addr, Tick>> prev_bra; // Find loop right before amo
     // Record loop begin, loop iter cnt
+
+    bool enable_ldst_recording;
+    std::unordered_set<Addr> amo_locations;
 
     struct AMORecord : public Record
     {
@@ -56,7 +62,9 @@ class AMORecorder
     };
 public:
 
-    AMORecorder(const std::string &name, BaseCPU *cpu) : filename(name), cpu(cpu) {
+    AMORecorder(const std::string &name, BaseCPU *cpu, bool enable_ldst_recording) :
+        filename(name), cpu(cpu),
+        enable_ldst_recording(false) {
         warn("Initializing AMORecorder %s\n", filename.c_str());
         amo_db.init_db();
 
@@ -87,20 +95,32 @@ public:
     void dump() {
         amo_db.save_db(filename);
     }
-    void record (AMOType type, uint64_t pc, uint64_t vaddr) {
+
+    void record(AMOType type, uint64_t pc, uint64_t vaddr) {
         amo_trace->write_record(
             AMORecord(type, pc, vaddr, prev_bra)
         );
-    }
-
-    void update_pc(Addr vaddr) {
-        prev_pc.push_back(vaddr);
-        if (prev_pc.size() > 150) {
-            prev_pc.erase(prev_pc.begin());
+        if (enable_ldst_recording &&
+            amo_locations.find(vaddr) != amo_locations.end()) {
+            amo_locations.emplace(vaddr);
         }
     }
 
-    void update_bra(Addr vaddr, Tick tick) {
+    void recordStore(uint64_t pc, uint64_t vaddr) {
+        if (enable_ldst_recording &&
+            amo_locations.find(vaddr) != amo_locations.end()) {
+            record(AMOType::STORE, pc, vaddr);
+        }
+    }
+
+    // void updatePC(Addr vaddr) {
+    //     prev_pc.push_back(vaddr);
+    //     if (prev_pc.size() > 150) {
+    //         prev_pc.erase(prev_pc.begin());
+    //     }
+    // }
+
+    void updateBranch(Addr vaddr, Tick tick) {
         prev_bra.push_back({vaddr, tick});
         if (prev_bra.size() > 4) {
             prev_bra.erase(prev_bra.begin());

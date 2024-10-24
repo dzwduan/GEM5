@@ -163,8 +163,12 @@ action(AllocateTBE_SeqRequest, desc="") {
         }
       } else if (in_msg.Type == RubyRequestType:ATOMIC_RETURN) {
         out_msg.type := CHIRequestType:AtomicLoad;
+        out_msg.amo_type := in_msg.getAMOType();
+        out_msg.cpu_id := in_msg.getCPUId();
       } else if (in_msg.Type == RubyRequestType:ATOMIC_NO_RETURN){
         out_msg.type := CHIRequestType:AtomicStore;
+        out_msg.amo_type := in_msg.getAMOType();
+        out_msg.cpu_id := in_msg.getCPUId();
       } else {
         error("Invalid RubyRequestType");
       }
@@ -287,6 +291,9 @@ action(Initiate_Request, desc="") {
   tbe.actions.pushNB(Event:TagArrayRead);
 
   incomingTransactionStart(address, curTransitionEvent(), initial, was_retried);
+  if (is_HN && tbe.amo_type != 0 && tbe.cpu_id > 0) {
+    record_begin_process(address, tbe.cpu_id);
+  }
 }
 
 action(Initiate_Request_DVM, desc="") {
@@ -428,6 +435,7 @@ action(StallRequest, desc="") {
   assert(tbe.addr == address);
   // tracks pending
   tbe.wakeup_pending_req := true;
+  // Record time stall begins here
   stall_and_wait(reqRdyPort, address);
 }
 
@@ -3482,6 +3490,9 @@ action(CheckCacheFill, desc="") {
 action(Finalize_DeallocateRequest, desc="") {
   assert(is_valid(tbe));
   assert(tbe.actions.empty());
+  if (is_HN && tbe.amo_type != 0 && tbe.cpu_id > 0) {
+    record_completion(address, tbe.cpu_id);
+  }
   wakeupPendingReqs(tbe);
   wakeupPendingSnps(tbe);
   wakeupPendingTgrs(tbe);

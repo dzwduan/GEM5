@@ -253,7 +253,8 @@ BaseCPU::BaseCPU(const Params &p, bool is_checker)
     }
 
     if (hasAMORecorder) {
-        amoRecorder = new AMORecorder("amo_recorder_" + std::to_string(_cpuId) + ".db", this);
+        amoRecorder = new AMORecorder("amo_recorder_" + std::to_string(_cpuId) + ".db",
+            this, true); // TODO add config option for this
         registerExitCallback([this]() {
             amoRecorder->dump();
         });

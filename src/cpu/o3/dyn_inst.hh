@@ -406,6 +406,13 @@ class DynInst : public ExecContext, public RefCounted
     IssueQue* issueQue = nullptr;
     int issueportid = -1;
 
+    // amo stuff
+    // If amo changed value of mem
+    bool amoChanged = false;
+    // Store to a memory location that is also accessed by an AMO
+    bool storeToAMO = false;
+    bool loadAMO = false;
+
   public:
     /** Records changes to result? */
     void recordResult(bool f) { instFlags[RecordResult] = f; }

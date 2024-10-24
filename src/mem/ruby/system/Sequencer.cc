@@ -735,6 +735,7 @@ Sequencer::atomicCallback(Addr address, DataBlock& data,
             recordMissLatency(&seq_req, true, mach, externalHit,
                               initialRequestTime, forwardRequestTime,
                               firstResponseTime);
+            // record atomic done latency here
         } else {
             // Read, Write or Atomic request:
             // reissue request to the cache hierarchy
@@ -828,6 +829,7 @@ Sequencer::hitCallback(SequencerRequest* srequest, DataBlock& data,
             // Set the data in the packet to the old value in the cache
             pkt->setData(
                 data.getData(getOffset(request_address), pkt->getSize()));
+            // AMO is done here
             DPRINTF(RubySequencer, "AMO original data %s\n", data);
             // execute AMO operation
             (*(pkt->getAtomicOp()))(

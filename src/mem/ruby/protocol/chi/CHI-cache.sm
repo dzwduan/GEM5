@@ -770,6 +770,9 @@ machine(MachineType:Cache, "Cache coherency protocol") :
     bool wakeup_pending_req;
     bool wakeup_pending_snp;
     bool wakeup_pending_tgr;
+
+    int cpu_id;
+    int amo_type;
   }
 
   // TBE table definition

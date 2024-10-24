@@ -125,6 +125,9 @@ structure(CHIRequestMsg, desc="", interface="Message") {
   bool usesTxnId,       desc="True if using a Transaction ID", default="false";
   Addr txnId,           desc="Transaction ID", default="0";
 
+  int cpu_id, desc="CPU ID", default="0";
+  int amo_type,        desc="Type of atomic instruction initiating this request", default="0";
+
   MessageSizeType MessageSize, default="MessageSizeType_Control";
 
   // No data for functional access

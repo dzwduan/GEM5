@@ -68,6 +68,10 @@ void outgoingTransactionEnd(Addr, bool, bool);
 Event curTransitionEvent();
 State curTransitionNextState();
 
+// recorders
+void record_arrival(Addr, int);
+void record_begin_process(Addr, int);
+void record_completion(Addr, int);
 
 ////////////////////////////////////////////////////////////////////////////
 // Interface functions required by SLICC
@@ -492,6 +496,8 @@ TBE allocateRequestTBE(Addr addr, CHIRequestMsg in_msg), return_by_pointer="yes"
   tbe.use_DCT := false;
 
   tbe.hasUseTimeout := false;
+  tbe.amo_type := in_msg.amo_type;
+  tbe.cpu_id := in_msg.cpu_id;
 
   return tbe;
 }
@@ -702,6 +708,8 @@ void prepareRequest(TBE tbe, CHIRequestType type, CHIRequestMsg & out_msg) {
   out_msg.is_local_pf := false;
   out_msg.is_remote_pf := tbe.is_local_pf || tbe.is_remote_pf;
   out_msg.txnId := tbe.txnId;
+  out_msg.amo_type := tbe.amo_type;
+  out_msg.cpu_id := tbe.cpu_id;
 
   assert(tbe.txnId != static_cast(Addr, "value", -1));
 }

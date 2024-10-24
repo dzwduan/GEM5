@@ -59,6 +59,7 @@
 #include "mem/ruby/common/MachineID.hh"
 #include "mem/ruby/network/MessageBuffer.hh"
 #include "mem/ruby/protocol/AccessPermission.hh"
+#include "mem/ruby/structures/HomeRecorder.hh"
 #include "mem/ruby/system/CacheRecorder.hh"
 #include "params/RubyController.hh"
 #include "sim/clocked_object.hh"
@@ -491,6 +492,22 @@ class AbstractController : public ClockedObject, public Consumer, public HasDown
         statistics::Histogram delayHistogram;
         std::vector<statistics::Histogram *> delayVCHistogram;
     } stats;
+
+    bool use_home_recorder;
+    HomeRecorder *home_recorder;
+
+    public:
+    void record_arrival(Addr addr, int cpuid) {
+      home_recorder->record_arrival(addr, cpuid);
+    }
+
+    void record_begin_process(Addr addr, int cpuid) {
+      home_recorder->record_begin_process(addr, cpuid);
+    }
+
+    void record_completion(Addr addr, int cpuid) {
+      home_recorder->record_completion(addr, cpuid);
+    }
 
 };
 

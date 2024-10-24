@@ -66,7 +66,8 @@ AbstractController::AbstractController(const Params &p)
       memoryPort(csprintf("%s.memory", name()), this),
       addrRanges(p.addr_ranges.begin(), p.addr_ranges.end()),
       mRetryRespEvent{*this, false},
-      stats(this)
+      stats(this),
+      use_home_recorder(p.use_home_recorder)
 {
     if (m_version == 0) {
         // Combine the statistics from all controllers
@@ -114,6 +115,13 @@ AbstractController::init()
     upstreamDestinations.resize();
     for (auto abs_cntrl : params().upstream_destinations) {
         upstreamDestinations.add(abs_cntrl->getMachineID());
+    }
+
+    if (use_home_recorder) {
+        home_recorder = new HomeRecorder("home_recorder_" + name() + ".db");
+        registerExitCallback([this]() {
+            home_recorder->dump();
+        });
     }
 }
 

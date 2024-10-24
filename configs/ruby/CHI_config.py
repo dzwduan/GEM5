@@ -349,6 +349,8 @@ class CHI_HNFController(CHI_Cache_Controller):
         self.response_latency = 40
         self.request_latency = 1
 
+        self.use_home_recorder = True
+
 
 
 class CHI_MNController(MiscNode_Controller):

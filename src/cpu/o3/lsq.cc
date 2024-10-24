@@ -1248,6 +1248,10 @@ LSQ::LSQRequest::addReq(Addr addr, unsigned size,
             );
         }
 
+        int amo_type = _inst->isAtomic() ? 20 : 0;
+        req->setAMOType(amo_type);
+        req->setCPUId(_port.getCPUPtr()->cpuId());
+
         _reqs.push_back(req);
     }
 }

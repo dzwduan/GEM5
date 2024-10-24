@@ -381,6 +381,9 @@ in_port(reqInPort, CHIRequestMsg, reqIn, rank=2,
       // DVM Sync and TLBIs from external sources will use txnId requests,
       // but they aren't implemented yet.
       assert(!in_msg.usesTxnId);
+      if (is_HN && in_msg.amo_type != 0 && in_msg.cpu_id > 0) {
+          record_arrival(in_msg.addr, in_msg.cpu_id);
+      }
       if (in_msg.allowRetry) {
         trigger(Event:AllocRequest, in_msg.addr,
               getCacheEntry(in_msg.addr), getCurrentActiveTBE(in_msg.addr));

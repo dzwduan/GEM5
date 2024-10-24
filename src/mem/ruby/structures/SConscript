@@ -60,3 +60,4 @@ Source('ALUFreeListArray.cc')
 Source('TBEStorage.cc')
 if env['CONF']['PROTOCOL'] == 'CHI':
     Source('MN_TBETable.cc')
+    Source('HomeRecorder.cc')

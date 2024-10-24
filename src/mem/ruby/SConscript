@@ -117,6 +117,7 @@ MakeInclude('structures/TBEStorage.hh')
 if env['CONF']['PROTOCOL'] == 'CHI':
     MakeInclude('structures/MN_TBEStorage.hh')
     MakeInclude('structures/MN_TBETable.hh')
+    MakeInclude('structures/HomeRecorder.hh')
 MakeInclude('structures/TBETable.hh')
 MakeInclude('structures/TimerTable.hh')
 MakeInclude('structures/WireBuffer.hh')

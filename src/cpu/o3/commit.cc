@@ -1842,7 +1842,11 @@ Commit::updateComInstStats(const DynInstPtr &inst)
     }
 
     if (inst->isCondCtrl()) {
-        cpu->getAMORecorder()->update_bra(inst->pcState().instAddr(), curTick());
+        cpu->getAMORecorder()->updateBranch(inst->pcState().instAddr(), curTick());
+    }
+
+    if (inst->isStore()) {
+        cpu->getAMORecorder()->recordStore(inst->pcState().instAddr(), inst->effAddr);
     }
 
     if (inst->isFullMemBarrier()) {

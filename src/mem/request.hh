@@ -558,6 +558,9 @@ class Request
 
     bool _isHInst = false;
 
+    int _cpuid = -1;
+    int _amoType = 0;
+
   public:
 
     /**
@@ -1197,6 +1200,12 @@ class Request
         privateFlags.set(VALID_XS_METADATA);
         _xsMetadata = xs_metadata;
     }
+
+    int getAMOType() const { return _amoType; }
+    void setAMOType(int amo_type) { _amoType = amo_type; }
+
+    int getCPUId() const { return _cpuid; }
+    void setCPUId(int cpu_id) { _cpuid = cpu_id; }
 
     bool isStorePFTrain() const { return _flags.isSet(STORE_PF_TRAIN); }
     /** Accessor functions for flags. Note that these are for testing
