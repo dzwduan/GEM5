@@ -50,7 +50,7 @@
 #include "base/types.hh"
 #include "debug/CDPHotVpns.hh"
 #include "mem/cache/base.hh"
-#include "mem/cache/prefetch/associative_set.hh"
+#include "mem/cache/prefetch/associative_set_impl.hh"
 #include "mem/cache/prefetch/queued.hh"
 #include "mem/packet.hh"
 #include "params/CDP.hh"
@@ -81,75 +81,141 @@ class CDP : public Queued
     bool enable_thro;
     /** Byte order used to access the cache */
     /** Update the RR right table after a prefetch fill */
+    class VpnEntry : public TaggedEntry
+    {
+      private:
+        u_int64_t refCnt;
+        u_int64_t prevRefCnt;
+        bool hot;
+      public:
+        uint64_t debug_vpn1{0};
+        uint64_t debug_vpn2{0};
+        VpnEntry()
+            : TaggedEntry(),
+              refCnt(0),
+              prevRefCnt(0),
+              hot(false)
+        {}
+        void init(uint64_t _debug_vpn1, uint64_t _debug_vpn2) {
+            refCnt = 1;
+            prevRefCnt = 0;
+            hot = false;
+            debug_vpn1 = _debug_vpn1;
+            debug_vpn2 = _debug_vpn2;
+        }
+        void access() {
+            refCnt++;
+        }
+        void decr() {
+            prevRefCnt = prevRefCnt == 0 ? 0 : (prevRefCnt - 1);
+            if (prevRefCnt == 0) {
+                hot = false;
+            }
+        }
+        void periodReset(float throttle_aggressiveness, bool enable_thro, uint64_t resetPeriod) {
+            // DPRINTF(CDPHotVpns, "prevRefCnt: %d, refCnt: %d, hot: %d\n", prevRefCnt, refCnt, hot);
+            if (refCnt > (resetPeriod / 16) || enable_thro) {
+                prevRefCnt = 0.2 * prevRefCnt + 0.8 * (refCnt * throttle_aggressiveness);
+            } else {
+                prevRefCnt = 0.2 * prevRefCnt;
+            }
 
+            if (prevRefCnt > 0) {
+                hot = true;
+            } else {
+                hot = false;
+            }
+
+            refCnt = 0;
+        }
+        bool getHot() { return hot; }
+        u_int64_t getPrefRefCnt() { return prevRefCnt; }
+        std::string name() { return std::string("VpnEntry"); }
+    };
+
+    template<class Entry>
     class VpnTable
     {
-      public:
-        std::map<int, std::map<int, int>> vpns;
-        std::map<int, std::map<int, int>> hotVpns;
-        int counter{0};
-        void add(int vpn2, int vpn1)
-        {
-            counter++;
-            if (vpns.find(vpn2) == vpns.end()) {
-                std::map<int, int> sub_map;
-                sub_map[vpn1] = 1;
-                vpns[vpn2] = sub_map;
-            } else if (vpns[vpn2].find(vpn1) == vpns[vpn2].end()) {
-                vpns[vpn2][vpn1] = 1;
-            } else {
-                vpns[vpn2][vpn1] += 1;
-            }
-        }
-        void resetConfidence(float throttle_aggressiveness, bool enable_thro)
-        {
-            if (counter < 128)
-                return;
-            // hotVpns = hotVpns * 0.5 + vpns * 0.5
-            for (auto pair2 : hotVpns) {
-                for (auto pair1 : pair2.second) {
-                    hotVpns[pair2.first][pair1.first] /= 2;
+        private:
+            AssociativeSet<Entry> table;
+            const uint64_t _resetPeriod;
+            uint64_t _resetCounter;
+
+        public:
+            VpnTable(int assoc, int num_entries, BaseIndexingPolicy *idx_policy,
+            replacement_policy::Base *rpl_policy, Entry const &init_val = Entry())
+                : table(assoc, num_entries, idx_policy, rpl_policy, init_val),
+                  _resetPeriod(128),
+                  _resetCounter(0)
+            {}
+            void add(int vpn2, int vpn1) {
+                _resetCounter++;
+                Addr cat_addr = (vpn2 << 9) | vpn1;
+                Entry *entry = table.findEntry(cat_addr, true);
+                if (entry) {
+                    table.accessEntry(entry);
+                    entry->access();
+                } else {
+                    entry = table.findVictim(cat_addr);
+                    entry->init(vpn1, vpn2);
+                    table.insertEntry(cat_addr, true, entry);
                 }
             }
-            for (auto pair2 : vpns) {
-                for (auto pair1 : pair2.second) {
-                    if (pair1.second > counter / 16 || enable_thro) {
-                        hotVpns[pair2.first][pair1.first] += (pair1.second * throttle_aggressiveness) / 2;
+            void resetConfidence(float throttle_aggressiveness, bool enable_thro)
+            {
+                if (_resetCounter < _resetPeriod)
+                    return;
+                auto it = table.begin();
+                while (it != table.end()) {
+                    if (it->isValid()) {
+                        it->periodReset(throttle_aggressiveness, enable_thro, _resetPeriod);
                     }
+                    it++;
+                }
+                _resetCounter = 0;
+                showHotVpns();
+            }
+            bool search(int vpn2, int vpn1) const
+            {
+                Addr cat_addr = (vpn2 << 9) | vpn1;
+                Entry *entry = table.findEntry(cat_addr, true);
+                if (entry) {
+                    return entry->getHot();
+                } else {
+                    return false;
+                }
+                return false;
+            }
+            void update(int vpn2, int vpn1, bool enable_thro)
+            {
+                Addr cat_addr = (vpn2 << 9) | vpn1;
+                Entry *entry = table.findEntry(cat_addr, true);
+                if (entry && enable_thro) {
+                    entry->decr();
                 }
             }
-            counter = 0;
-            vpns.clear();
-            showHotVpns();
-        }
-        bool search(int vpn2, int vpn1)
-        {
-            if (hotVpns.find(vpn2) != hotVpns.end() && hotVpns[vpn2].find(vpn1) != hotVpns[vpn2].end()) {
-                if (hotVpns[vpn2][vpn1] > 0) {
-                    return true;
-                }
-            }
-            return false;
-        }
-        void update(int vpn2, int vpn1, bool enable_thro)
-        {
-            if (enable_thro) {
-                hotVpns[vpn2][vpn1]--;
-            }
-        }
-        void showHotVpns()
-        {
-            if (GEM5_UNLIKELY(::gem5::debug::CDPHotVpns)) {
-                for (auto pair2 : hotVpns) {
-                    for (auto pair1 : pair2.second) {
-                        DPRINTFN("Table entry(%#llx, %#llx): %#llx\n", pair2.first, pair1.first, pair1.second);
+            void showHotVpns()
+            {
+                if (GEM5_UNLIKELY(::gem5::debug::CDPHotVpns)) {
+                    uint64_t valid_cnt = 0;
+                    DPRINTFN("------------------------------------\n");
+                    auto it = table.begin();
+                    while (it != table.end()) {
+                        if (it->isValid() && (it->getPrefRefCnt() > 0)) {
+                            valid_cnt++;
+                            DPRINTFN("Table entry(%#llx, %#llx): %#llx\n",\
+                            it->debug_vpn2, it->debug_vpn1, it->getPrefRefCnt());
+                        }
+                        it++;
                     }
+                    DPRINTFN("%ld valid entries in hotVpns\n", valid_cnt);
+                    DPRINTFN("------------------------------------\n");
                 }
             }
-        }
-        std::string name() { return std::string("VPNTABLE"); }
-        VpnTable() { resetConfidence(2, false); }
-    } vpnTable;
+            std::string name() { return std::string("VpnTable"); }
+    };
+
+    VpnTable<VpnEntry> vpnTable;
 
   public:
     StatGroup *prefetchStatsPtr = nullptr;

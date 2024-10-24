@@ -483,6 +483,23 @@ class CDP(QueuedPrefetcher):
     on_data  = True
     on_inst  = False
     use_byteorder = Param.Bool(True,"")
+    vpn_assoc = Param.Unsigned(4,
+        "Ways of vpnTable")
+    vpn_entries = Param.MemorySize(
+        "512",
+        "num of entries in vpnTable"
+    )
+    vpn_indexing_policy = Param.BaseIndexingPolicy(
+        SetAssociative(
+            entry_size=1,
+            assoc=Parent.vpn_assoc,
+            size=Parent.vpn_entries),
+        "Indexing policy of vpnTable"
+    )
+    vpn_replacement_policy = Param.BaseReplacementPolicy(
+        LRURP(),
+        "Replacement policy of vpnTable"
+    )
     throttle_aggressiveness = Param.Float(2.0,
         "A parameter to control the aggressiveness of throttling")
 
