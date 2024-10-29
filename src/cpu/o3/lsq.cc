@@ -79,7 +79,7 @@ LSQ::LSQ(CPU *cpu_ptr, IEW *iew_ptr, const BaseO3CPUParams &params)
       _cacheBlocked(false),
       cacheStorePorts(params.cacheStorePorts), usedStorePorts(0),
       cacheLoadPorts(params.cacheLoadPorts), usedLoadPorts(0),lastConflictCheckTick(0),
-      recentlyloadAddr(16),
+      recentlyloadAddr(8),
       enableBankConflictCheck(params.BankConflictCheck),
       waitingForStaleTranslation(false),
       staleTranslationWaitTxnId(0),
@@ -207,20 +207,21 @@ bool
 LSQ::bankConflictedCheck(Addr vaddr)
 {
     bool now_bank_conflict = false;
+    // 64KB Dcache 8way 128sets
+    // [12:6]   [5:3]     [2:0]
+    // setIndex bankIndex dataOffset
+    const uint64_t cacheBankmask = 0b1111111111000;
     if (enableBankConflictCheck) {
-        if (l1dBankAddresses.size() == 0) {
+        if (recentlyloadAddr.contains((vaddr & cacheBankmask))) {
+            recentlyloadAddr.get((vaddr & cacheBankmask));
+            return false;
+        }
+        auto bank_it = std::find(l1dBankAddresses.begin(), l1dBankAddresses.end(), bankNum(vaddr));
+        if (bank_it == l1dBankAddresses.end()) {
             l1dBankAddresses.push_back(bankNum(vaddr));
+            recentlyloadAddr.insert((vaddr & cacheBankmask), {});
         } else {
-            if (recentlyloadAddr.contains(vaddr)) {
-                return false;
-            }
-            auto bank_it = std::find(l1dBankAddresses.begin(), l1dBankAddresses.end(), bankNum(vaddr));
-            if (bank_it == l1dBankAddresses.end()) {
-                l1dBankAddresses.push_back(bankNum(vaddr));
-                recentlyloadAddr.insert(vaddr, {});
-            } else {
-                now_bank_conflict = true;
-            }
+            now_bank_conflict = true;
         }
     }
     return now_bank_conflict;
