@@ -59,7 +59,7 @@ CDP::CDP(const CDPParams &p)
       throttle_aggressiveness(p.throttle_aggressiveness),
       enable_thro(false),
       vpnTable(p.vpn_assoc, p.vpn_entries, p.vpn_indexing_policy,
-          p.vpn_replacement_policy, VpnEntry()),
+          p.vpn_replacement_policy, p.vpn_sub_entries, VpnEntry(p.vpn_sub_entries)),
       l3_miss_info(0, 0),
       byteOrder(p.sys->getGuestByteOrder()),
       cdpStats(this)

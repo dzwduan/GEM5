@@ -81,27 +81,37 @@ class CDP : public Queued
     bool enable_thro;
     /** Byte order used to access the cache */
     /** Update the RR right table after a prefetch fill */
-    class VpnEntry : public TaggedEntry
+    class SubVpnEntry
     {
       private:
         u_int64_t refCnt;
         u_int64_t prevRefCnt;
+        bool exist;
         bool hot;
       public:
         uint64_t debug_vpn1{0};
         uint64_t debug_vpn2{0};
-        VpnEntry()
-            : TaggedEntry(),
-              refCnt(0),
+        SubVpnEntry()
+            : refCnt(0),
               prevRefCnt(0),
+              exist(false),
               hot(false)
         {}
         void init(uint64_t _debug_vpn1, uint64_t _debug_vpn2) {
             refCnt = 1;
             prevRefCnt = 0;
             hot = false;
+            exist = true;
             debug_vpn1 = _debug_vpn1;
             debug_vpn2 = _debug_vpn2;
+        }
+        void discard() {
+            refCnt = 0;
+            prevRefCnt = 0;
+            hot = false;
+            exist = false;
+            debug_vpn1 = 0;
+            debug_vpn2 = 0;
         }
         void access() {
             refCnt++;
@@ -113,11 +123,14 @@ class CDP : public Queued
             }
         }
         void periodReset(float throttle_aggressiveness, bool enable_thro, uint64_t resetPeriod) {
-            // DPRINTF(CDPHotVpns, "prevRefCnt: %d, refCnt: %d, hot: %d\n", prevRefCnt, refCnt, hot);
-            if (refCnt > (resetPeriod / 16) || enable_thro) {
-                prevRefCnt = 0.2 * prevRefCnt + 0.8 * (refCnt * throttle_aggressiveness);
+            if (enable_thro) {
+                if (refCnt > (resetPeriod / 16)) {
+                    prevRefCnt = 0.2 * prevRefCnt + 0.8 * refCnt;
+                } else {
+                    prevRefCnt = 0.2 * prevRefCnt;
+                }
             } else {
-                prevRefCnt = 0.2 * prevRefCnt;
+                prevRefCnt = 0.2 * prevRefCnt + 0.8 * refCnt;
             }
 
             if (prevRefCnt > 0) {
@@ -129,7 +142,55 @@ class CDP : public Queued
             refCnt = 0;
         }
         bool getHot() { return hot; }
+        bool getExist() { return exist; }
         u_int64_t getPrefRefCnt() { return prevRefCnt; }
+        std::string name() { return std::string("SubVpnEntry"); }
+    };
+
+    class VpnEntry : public TaggedEntry
+    {
+      private:
+        std::vector<SubVpnEntry> subEntries;
+        int subEntryNum;
+        int subEntryBits;
+      public:
+        VpnEntry(int num)
+            : TaggedEntry(),
+              subEntryNum(num)
+        {
+            for (int i = 0; i < subEntryNum; i++) {
+                subEntries.emplace_back(SubVpnEntry());
+            }
+            subEntryBits = ceil(log2(subEntryNum));
+        }
+        void discard() {
+            for (int i = 0; i < subEntryNum; i++) {
+                subEntries[i].discard();
+            }
+        }
+        void init(uint64_t vpn1, uint64_t vpn2) {
+            uint64_t sub_idx = ((vpn2 << 9) | vpn1) & ((1UL << subEntryBits) - 1);
+            assert(sub_idx < subEntryNum);
+            subEntries[sub_idx].init(vpn1, vpn2);
+        }
+        void access(uint64_t idx) {
+            subEntries[idx].access();
+        }
+        void decr(uint64_t idx) {
+            subEntries[idx].decr();
+        }
+        void periodReset(float throttle_aggressiveness, bool enable_thro, uint64_t resetPeriod) {
+            for (int i = 0; i < subEntryNum; i++) {
+                if (subEntries[i].getExist()) {
+                    subEntries[i].periodReset(throttle_aggressiveness, enable_thro, resetPeriod);
+                }
+            }
+        }
+        bool getExist(uint64_t idx) { return subEntries[idx].getExist(); }
+        bool getHot(uint64_t idx) { return subEntries[idx].getHot(); }
+        u_int64_t getPrefRefCnt(uint64_t idx) { return subEntries[idx].getPrefRefCnt(); }
+        u_int64_t getDebugVpn1(uint64_t idx) { return subEntries[idx].debug_vpn1; }
+        u_int64_t getDebugVpn2(uint64_t idx) { return subEntries[idx].debug_vpn2; }
         std::string name() { return std::string("VpnEntry"); }
     };
 
@@ -140,23 +201,38 @@ class CDP : public Queued
             AssociativeSet<Entry> table;
             const uint64_t _resetPeriod;
             uint64_t _resetCounter;
+            uint64_t _subEntryNum;
+            uint64_t _subEntryBits;
 
         public:
             VpnTable(int assoc, int num_entries, BaseIndexingPolicy *idx_policy,
-            replacement_policy::Base *rpl_policy, Entry const &init_val = Entry())
+            replacement_policy::Base *rpl_policy, int sub_entries, Entry const &init_val = Entry())
                 : table(assoc, num_entries, idx_policy, rpl_policy, init_val),
                   _resetPeriod(128),
-                  _resetCounter(0)
-            {}
+                  _resetCounter(0),
+                  _subEntryNum(sub_entries)
+            {
+                assert(_subEntryNum % 2 == 0 && _subEntryNum < 512);
+                _subEntryBits = ceil(log2(_subEntryNum));
+            }
             void add(int vpn2, int vpn1) {
                 _resetCounter++;
                 Addr cat_addr = (vpn2 << 9) | vpn1;
+                uint64_t sub_idx = cat_addr & ((1UL << _subEntryBits) - 1);
+                assert(sub_idx < _subEntryNum);
+                // mask lower bits
+                cat_addr = cat_addr >> _subEntryBits;
                 Entry *entry = table.findEntry(cat_addr, true);
                 if (entry) {
                     table.accessEntry(entry);
-                    entry->access();
+                    if (entry->getExist(sub_idx)) {
+                        entry->access(sub_idx);
+                    } else {
+                        entry->init(vpn1, vpn2);
+                    }
                 } else {
                     entry = table.findVictim(cat_addr);
+                    entry->discard();
                     entry->init(vpn1, vpn2);
                     table.insertEntry(cat_addr, true, entry);
                 }
@@ -178,9 +254,16 @@ class CDP : public Queued
             bool search(int vpn2, int vpn1) const
             {
                 Addr cat_addr = (vpn2 << 9) | vpn1;
+                uint64_t sub_idx = cat_addr & ((1UL << _subEntryBits) - 1);
+                assert(sub_idx < _subEntryNum);
+                cat_addr = cat_addr >> _subEntryBits;
                 Entry *entry = table.findEntry(cat_addr, true);
                 if (entry) {
-                    return entry->getHot();
+                    if (entry->getExist(sub_idx)) {
+                        return entry->getHot(sub_idx);
+                    } else {
+                        return false;
+                    }
                 } else {
                     return false;
                 }
@@ -189,9 +272,14 @@ class CDP : public Queued
             void update(int vpn2, int vpn1, bool enable_thro)
             {
                 Addr cat_addr = (vpn2 << 9) | vpn1;
+                uint64_t sub_idx = cat_addr & ((1UL << _subEntryBits) - 1);
+                assert(sub_idx < _subEntryNum);
+                cat_addr = cat_addr >> _subEntryBits;
                 Entry *entry = table.findEntry(cat_addr, true);
                 if (entry && enable_thro) {
-                    entry->decr();
+                    if (entry->getExist(sub_idx)) {
+                        entry->decr(sub_idx);
+                    }
                 }
             }
             void showHotVpns()
@@ -201,10 +289,14 @@ class CDP : public Queued
                     DPRINTFN("------------------------------------\n");
                     auto it = table.begin();
                     while (it != table.end()) {
-                        if (it->isValid() && (it->getPrefRefCnt() > 0)) {
-                            valid_cnt++;
-                            DPRINTFN("Table entry(%#llx, %#llx): %#llx\n",\
-                            it->debug_vpn2, it->debug_vpn1, it->getPrefRefCnt());
+                        if (it->isValid()) {
+                            for (int i = 0; i < _subEntryNum; i++) {
+                                if (it->getExist(i) && it->getPrefRefCnt(i) > 0) {
+                                    valid_cnt++;
+                                    DPRINTFN("Table entry(%#llx, %#llx): %#llx\n",\
+                                    it->getDebugVpn2(i), it->getDebugVpn1(i), it->getPrefRefCnt(i));
+                                }
+                            }
                         }
                         it++;
                     }

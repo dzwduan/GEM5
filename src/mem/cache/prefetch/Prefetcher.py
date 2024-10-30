@@ -483,10 +483,12 @@ class CDP(QueuedPrefetcher):
     on_data  = True
     on_inst  = False
     use_byteorder = Param.Bool(True,"")
+    vpn_sub_entries = Param.Unsigned(4,
+        "Sub entry number of each of vpnEntry")
     vpn_assoc = Param.Unsigned(4,
         "Ways of vpnTable")
     vpn_entries = Param.MemorySize(
-        "512",
+        "16",
         "num of entries in vpnTable"
     )
     vpn_indexing_policy = Param.BaseIndexingPolicy(
