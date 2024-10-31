@@ -1719,6 +1719,12 @@ LSQUnit::completeStore(typename StoreQueue::iterator store_idx, bool from_sbuffe
             (*(request->req()->getAtomicOpFunctor()))(tmp_data);
             // after amo operate on golden memory
 
+            bool changed = memcmp(store_inst->getAmoOldGoldenValuePtr(), tmp_data, request->_size);
+            // record atomics here
+            // Record PC, vaddr, cycle, whether data changed
+            cpu->getAMORecorder()->record(AMOType::AMOOR, store_inst->pcState().instAddr(),
+                                          paddr, changed);
+            // warn("AMO %#lx update mem? %d\n", paddr, changed);
             DPRINTF(LSQUnit, "AMO writing to golden memory at addr %#x, data %#lx, mask %#x, size %d\n",
                     paddr, *((uint64_t *)(tmp_data)), 0xff, request->_size);
             cpu->goldenMemManager()->updateGoldenMem(paddr, tmp_data, 0xff,

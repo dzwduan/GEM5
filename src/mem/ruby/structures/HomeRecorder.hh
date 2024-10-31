@@ -31,6 +31,9 @@ class HomeRecorder
 
     struct HomeRecord : public Record
     {
+        // Failed CleanUnique + ReadUnique causes this.
+        bool double_req;
+
         HomeRecord(Addr paddr, int cpuid, Tick arrival_tick) {
             _tick = curTick();
             _uint64_data["paddr"] = paddr;
@@ -38,10 +41,11 @@ class HomeRecorder
             _uint64_data["arrival_tick"] = arrival_tick;
             _uint64_data["begin_tick"] = arrival_tick;
             _uint64_data["completion_tick"] = 0;
+            double_req = false;
         }
 
         void setBeginTick(Tick begin_tick) {
-            _uint64_data["ready_tick"] = begin_tick;
+            _uint64_data["begin_tick"] = begin_tick;
         }
 
         void setCompletionTick(Tick completion_tick) {
@@ -78,11 +82,16 @@ public:
     }
 
     void record_arrival(Addr addr, int cpuid) {
-        PerCPURecord this_cpu_record = pending_records[cpuid];
+        PerCPURecord& this_cpu_record = pending_records[cpuid];
         if (GEM5_UNLIKELY(this_cpu_record.find(addr) != this_cpu_record.end())) {
             warn("HomeRecorder: At arrival: at addr %#lx cpuid %d,"
                 "there's already one request!\n", addr, cpuid);
+            if (this_cpu_record.at(addr).double_req) {
+                fatal("HomeRecorder: At arrival: at addr %#lx cpuid %d, TRIPLE REQ?! WTF?\n", addr, cpuid);
+            }
+            this_cpu_record.at(addr).double_req = true;
         } else {
+            // warn("HomeRecorder: At arrival: at addr %#lx cpuid %d\n", addr, cpuid);
             this_cpu_record.emplace(addr, HomeRecord(addr, cpuid, curTick()));
         }
     }
@@ -96,7 +105,7 @@ public:
         if (GEM5_UNLIKELY(this_record == this_cpu_record->second.end())) {
             fatal("HomeRecorder: At begin process: No record for addr %#lx cpuid %d\n", addr, cpuid);
         }
-        this_record->second.setCompletionTick(curTick());
+        this_record->second.setBeginTick(curTick());
     }
 
     void record_completion(Addr addr, int cpuid) {
@@ -108,10 +117,15 @@ public:
         if (GEM5_UNLIKELY(this_record == this_cpu_record->second.end())) {
             fatal("HomeRecorder: At completion: No record for addr %#lx cpuid %d\n", addr, cpuid);
         }
-        this_record->second.setCompletionTick(curTick());
-        home_trace->write_record(this_record->second);
-        // delete
-        this_cpu_record->second.erase(this_record);
+
+        if (GEM5_UNLIKELY(this_record->second.double_req)) {
+            this_record->second.double_req = false;
+        } else {
+            this_record->second.setCompletionTick(curTick());
+            home_trace->write_record(this_record->second);
+            this_cpu_record->second.erase(this_record);
+        }
+        // warn("HomeRecorder: deleting entry for addr #%lx cpuid %d\n", addr, cpuid);
     }
 };
 

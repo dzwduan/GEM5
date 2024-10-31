@@ -1835,18 +1835,15 @@ Commit::updateComInstStats(const DynInstPtr &inst)
 
         if (inst->isAtomic()) {
             stats.amos[tid]++;
-            // Record PC, vaddr, cycle, whether data changed
-            cpu->getAMORecorder()->record(AMOType::AMOOR, inst->pcState().instAddr(),
-                                          inst->effAddr);
         }
     }
 
     if (inst->isCondCtrl()) {
-        cpu->getAMORecorder()->updateBranch(inst->pcState().instAddr(), curTick());
+        cpu->getAMORecorder()->updateBranch(inst->pcState().instAddr(), cpu->curCycle());
     }
 
     if (inst->isStore()) {
-        cpu->getAMORecorder()->recordStore(inst->pcState().instAddr(), inst->effAddr);
+        cpu->getAMORecorder()->recordStore(inst->pcState().instAddr(), inst->physEffAddr);
     }
 
     if (inst->isFullMemBarrier()) {

@@ -45,6 +45,7 @@
 #include "base/compiler.hh"
 #include "base/logging.hh"
 #include "base/str.hh"
+#include "cpu/amo_recorder.hh"
 #include "cpu/base.hh"
 #include "cpu/testers/rubytest/RubyTester.hh"
 #include "debug/LLSC.hh"
@@ -433,6 +434,16 @@ Sequencer::recordMissLatency(SequencerRequest* srequest, bool llscSuccess,
 
     m_latencyHist.sample(total_lat);
     m_typeLatencyHist[type]->sample(total_lat);
+    // TODO get amoRecorder ptr and record latency
+    if (srequest->pkt->isAtomicOp()) {
+        AMORecorder *amo_recorder = srequest->pkt->req->getCPU()->getAMORecorder();
+        amo_recorder->setLatency(total_lat);
+    }
+
+    if (srequest->pkt->isWrite()) {
+        AMORecorder *amo_recorder = srequest->pkt->req->getCPU()->getAMORecorder();
+        amo_recorder->setLatencyStore(total_lat, srequest->pkt->getAddr());
+    }
 
     if (isExternalHit) {
         m_missLatencyHist.sample(total_lat);
@@ -825,16 +836,27 @@ Sequencer::hitCallback(SequencerRequest* srequest, DataBlock& data,
             data.setData(&overwrite_val[0],
                          getOffset(request_address), pkt->getSize());
             DPRINTF(RubySequencer, "swap data %s\n", data);
+            AMORecorder *amo_recorder = pkt->req->getCPU()->getAMORecorder();
+            bool changed = memcmp(pkt->getPtr<uint8_t>(),
+                data.getData(getOffset(request_address), pkt->getSize()), pkt->getSize());
+            warn("Value changed for swap addr %#lx? %d\n", pkt->getAddr(), changed);
+            amo_recorder->recordChanged(request_address, changed);
         } else if (pkt->isAtomicOp()) {
             // Set the data in the packet to the old value in the cache
-            pkt->setData(
-                data.getData(getOffset(request_address), pkt->getSize()));
+            uint8_t size = pkt->getSize();
+            const uint8_t *data_ptr = data.getData(getOffset(request_address), size);
+            pkt->setData(data_ptr);
             // AMO is done here
             DPRINTF(RubySequencer, "AMO original data %s\n", data);
             // execute AMO operation
             (*(pkt->getAtomicOp()))(
                 data.getDataMod(getOffset(request_address)));
             DPRINTF(RubySequencer, "AMO new data %s\n", data);
+            // check data changed (This is done after record miss latency)
+            AMORecorder *amo_recorder = pkt->req->getCPU()->getAMORecorder();
+            bool changed = memcmp(pkt->getPtr<uint8_t>(), data_ptr, size);
+            warn("Value changed for addr %#lx? %d\n", pkt->getAddr(), changed);
+            amo_recorder->recordChanged(request_address, changed);
         } else if (type != RubyRequestType_Store_Conditional || llscSuccess) {
             // Types of stores set the actual data here, apart from
             // failed Store Conditional requests

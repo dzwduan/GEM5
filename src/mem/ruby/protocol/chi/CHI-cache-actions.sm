@@ -291,7 +291,8 @@ action(Initiate_Request, desc="") {
   tbe.actions.pushNB(Event:TagArrayRead);
 
   incomingTransactionStart(address, curTransitionEvent(), initial, was_retried);
-  if (is_HN && tbe.amo_type != 0 && tbe.cpu_id > 0) {
+  printTBEState("Before_Record_Begin", tbe);
+  if (is_HN && tbe.amo_type != 0 && tbe.cpu_id >= 0) {
     record_begin_process(address, tbe.cpu_id);
   }
 }
@@ -2475,7 +2476,7 @@ action(UpdateDataState_FromADataResp, desc="") {
     DPRINTF(RubySlicc, "Atomic before %s\n", tbe.dataBlk);
 
     tbe.oldDataBlk := tbe.dataBlk;
-    tbe.dataBlk.atomicPartial(tbe.dataBlk, tbe.atomic_op);
+    tbe.dataBlk.atomicPartial(tbe.dataBlk, tbe.atomic_op); // Monitor value changed here
     tbe.dataBlk.clearAtomicLogEntries();
     tbe.dataDirty := true;
 
@@ -3490,7 +3491,7 @@ action(CheckCacheFill, desc="") {
 action(Finalize_DeallocateRequest, desc="") {
   assert(is_valid(tbe));
   assert(tbe.actions.empty());
-  if (is_HN && tbe.amo_type != 0 && tbe.cpu_id > 0) {
+  if (is_HN && tbe.amo_type != 0 && tbe.cpu_id >= 0) {
     record_completion(address, tbe.cpu_id);
   }
   wakeupPendingReqs(tbe);

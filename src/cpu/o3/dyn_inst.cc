@@ -484,7 +484,7 @@ DynInst::initiateMemAMO(Addr addr, unsigned size, Request::Flags flags,
 void
 DynInst::printDisassemblyAndResult(const std::string &site) const
 {
-    DPRINTF(CommitTrace, "%s [sn:%lu pc:%#lx] enDqT: %lu, exDqT: %lu, readyT: %lu, CompleT:%lu, %s",
+    DPRINTF(CommitTrace, "%s [sn:%lu pc:%#lx] enDqT: %lu, exDqT: %lu, readyT: %lu, CompleT:%lu, %s\n",
             site.c_str(), seqNum, pcState().instAddr(),
             enterDQTick, exitDQTick, readyTick, completionTick,
             staticInst->disassemble(pcState().instAddr()));

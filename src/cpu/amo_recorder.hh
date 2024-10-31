@@ -26,6 +26,9 @@ enum AMOType
     STORE = 201
 };
 
+#define BRA_HIST 3
+#define AMO_HIST 3
+
 class BaseCPU;
 
 class AMORecorder
@@ -39,24 +42,43 @@ class AMORecorder
     // std::vector<Addr> prev_pc;
     // std::vector<Addr> prev_st;
     std::vector<std::pair<Addr, Tick>> prev_bra; // Find loop right before amo
+    std::vector<std::pair<Addr, Tick>> prev_amo; // Find loop right before amo
     // Record loop begin, loop iter cnt
 
     bool enable_ldst_recording;
     std::unordered_set<Addr> amo_locations;
 
+    // In flight
+    Cycles mem_latency;
+    bool value_changed;
+
+    struct AMOInfo
+    {
+        AMOType type;
+        Addr pc;
+        Addr paddr;
+        // Cycles mem_latency;
+    };
+
+    std::vector<AMOInfo> latest_amos;
+
     struct AMORecord : public Record
     {
-        AMORecord(AMOType type, uint64_t pc, uint64_t vaddr, std::vector<std::pair<Addr, Tick>> prev_bra) {
+        AMORecord(AMOType type, uint64_t pc, uint64_t paddr, Cycles mem_latency,
+            bool value_changed,
+            std::vector<std::pair<Addr, Tick>> prev_bra) {
             _tick = curTick();
             // _uint64_data["cycles"] = cycles;
             _uint64_data["type"] = type;
             _uint64_data["pc"] = pc;
-            _uint64_data["vaddr"] = vaddr;
+            _uint64_data["paddr"] = paddr;
+            _uint64_data["mem_latency"] = mem_latency;
+            _uint64_data["value_changed"] = value_changed;
             // _uint64_data["hist25"] = prev_pc.at(125);
-            for (int i = 1; i <= 4; i++) {
+            for (int i = 1; i <= BRA_HIST; i++) {
                 // Most recent branch is stored at back
-                _uint64_data["bra_addr" + std::to_string(i)] = prev_bra.at(4-i).first;
-                _uint64_data["bra_tick" + std::to_string(i)] = prev_bra.at(4-i).second;
+                _uint64_data["bra_addr" + std::to_string(i)] = prev_bra.at(BRA_HIST-i).first;
+                _uint64_data["bra_tick" + std::to_string(i)] = prev_bra.at(BRA_HIST-i).second;
             }
         }
     };
@@ -64,7 +86,7 @@ public:
 
     AMORecorder(const std::string &name, BaseCPU *cpu, bool enable_ldst_recording) :
         filename(name), cpu(cpu),
-        enable_ldst_recording(false) {
+        enable_ldst_recording(true) {
         warn("Initializing AMORecorder %s\n", filename.c_str());
         amo_db.init_db();
 
@@ -72,17 +94,13 @@ public:
             // {"cycles", DataType::UINT64},
             {"type", DataType::UINT64},
             {"pc", DataType::UINT64},
-            {"vaddr", DataType::UINT64},
+            {"paddr", DataType::UINT64},
+            {"mem_latency", DataType::UINT64},
+            {"value_changed", DataType::UINT64}
             // History 50 100
-            // {"hist25", DataType::UINT64},
-            // {"hist50", DataType::UINT64},
-            // {"hist75", DataType::UINT64},
-            // {"hist100", DataType::UINT64},
-            // {"hist125", DataType::UINT64},
-            // {"hist150", DataType::UINT64},
             // {"st1", DataType::UINT64},
         };
-        for (int i = 1; i <= 4; i++) {
+        for (int i = 1; i <= BRA_HIST; i++) {
             fields.push_back({"bra_addr" + std::to_string(i), DataType::UINT64});
             fields.push_back({"bra_tick" + std::to_string(i), DataType::UINT64});
         }
@@ -96,40 +114,77 @@ public:
         amo_db.save_db(filename);
     }
 
-    void record(AMOType type, uint64_t pc, uint64_t vaddr) {
+    void record(AMOType type, uint64_t pc, uint64_t paddr, bool changed) {
         amo_trace->write_record(
-            AMORecord(type, pc, vaddr, prev_bra)
+            AMORecord(type, pc, paddr, mem_latency, changed, prev_bra)
         );
-        if (enable_ldst_recording &&
-            amo_locations.find(vaddr) != amo_locations.end()) {
-            amo_locations.emplace(vaddr);
+
+        if (type != AMOType::STORE) {
+            latest_amos.push_back(AMOInfo{.type = type, .pc = pc, .paddr = paddr});
+            if (latest_amos.size() > AMO_HIST) {
+                latest_amos.erase(latest_amos.begin());
+            }
         }
     }
 
-    void recordStore(uint64_t pc, uint64_t vaddr) {
-        if (enable_ldst_recording &&
-            amo_locations.find(vaddr) != amo_locations.end()) {
-            record(AMOType::STORE, pc, vaddr);
+    void recordStore(uint64_t pc, uint64_t paddr) {
+        if (enable_ldst_recording) {
+            // find latest_amos whos paddr is paddr
+            for (auto it = latest_amos.end(); it != latest_amos.begin(); it--) {
+                if (it->paddr == paddr) {
+                    amo_trace->write_record(
+                        AMORecord(AMOType::STORE, pc, paddr, mem_latency, false, prev_bra)
+                    );
+                    break;
+                }
+            }
         }
     }
 
-    // void updatePC(Addr vaddr) {
-    //     prev_pc.push_back(vaddr);
+    // void updatePC(Addr paddr) {
+    //     prev_pc.push_back(paddr);
     //     if (prev_pc.size() > 150) {
     //         prev_pc.erase(prev_pc.begin());
     //     }
     // }
 
-    void updateBranch(Addr vaddr, Tick tick) {
-        prev_bra.push_back({vaddr, tick});
-        if (prev_bra.size() > 4) {
+    void updateBranch(Addr paddr, Tick tick) {
+        prev_bra.push_back({paddr, tick});
+        if (prev_bra.size() > BRA_HIST) {
             prev_bra.erase(prev_bra.begin());
         }
     }
 
-    void update_store(Addr store_addr) {
-
+    // TODO This is buggy but I cannot think of an elegant way to fix
+    void setLatencyStore(Cycles cycles, Addr paddr) {
+        if (enable_ldst_recording) {
+            for (auto it = latest_amos.end(); it != latest_amos.begin(); it--) {
+                if (it->paddr == paddr) {
+                    mem_latency = cycles;
+                    break;
+                }
+            }
+        }
     }
+
+    void setLatency(Cycles cycles) {
+        mem_latency = cycles;
+    }
+
+    void recordChanged(Addr paddr, bool changed) {
+        value_changed = changed;
+    }
+
+    // void setLatencyWrite(Cycles cycles, Addr paddr) {
+    //     if (enable_ldst_recording) {
+    //         for (auto it = latest_amos.end(); it != latest_amos.begin(); it--) {
+    //             if (it->paddr == paddr) {
+    //                 // create a new amoinfo
+    //                 break;
+    //             }
+    //         }
+    //     }
+    // }
 };
 
 }

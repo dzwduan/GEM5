@@ -451,6 +451,8 @@ void initializeTBE(TBE tbe, Addr addr, int storSlot) {
   tbe.delayNextAction := intToTick(0);
 
   tbe.is_stale := false;
+  tbe.amo_type := 0;
+  tbe.cpu_id := -1;
 }
 
 TBE allocateRequestTBE(Addr addr, CHIRequestMsg in_msg), return_by_pointer="yes" {
@@ -895,6 +897,7 @@ void printTBEState(std::string pos, TBE tbe) {
                         tbe.dir_ownerIsExcl,tbe.dir_sharers.count(),
                         tbe.dataToBeInvalid, tbe.dataToBeSharedClean,
                         tbe.doCacheFill, tbe.pendAction, tbe.txnId);
+    DPRINTF(RubySlicc, "    amo_type: %d, cpu_id: %d\n", tbe.amo_type, tbe.cpu_id);
   } else {
     DPRINTF(RubySlicc, "At %s: invalid tbe\n", pos);
   }

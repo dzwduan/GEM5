@@ -110,6 +110,7 @@ namespace context_switch_task_id
 class Packet;
 class Request;
 class ThreadContext;
+class BaseCPU;
 
 typedef std::shared_ptr<Request> RequestPtr;
 typedef uint16_t RequestorID;
@@ -558,6 +559,7 @@ class Request
 
     bool _isHInst = false;
 
+    BaseCPU *_cpu;
     int _cpuid = -1;
     int _amoType = 0;
 
@@ -1204,8 +1206,11 @@ class Request
     int getAMOType() const { return _amoType; }
     void setAMOType(int amo_type) { _amoType = amo_type; }
 
-    int getCPUId() const { return _cpuid; }
-    void setCPUId(int cpu_id) { _cpuid = cpu_id; }
+    // int getCPUId() const { return _cpuid; }
+    int getCPUId() const;
+    // void setCPUId(int cpu_id) { _cpuid = cpu_id; }
+    BaseCPU *getCPU() const;
+    void setCPU(BaseCPU *cpu);
 
     bool isStorePFTrain() const { return _flags.isSet(STORE_PF_TRAIN); }
     /** Accessor functions for flags. Note that these are for testing
