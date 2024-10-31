@@ -226,6 +226,8 @@ def config_cache(options, system):
                     if options.kmh_align:
                         dcache.prefetcher.enable_berti = False
                         dcache.prefetcher.enable_sstride = True
+                        dcache.prefetcher.enable_activepage = False
+                        dcache.prefetcher.enable_xsstream = True
 
             if options.ideal_cache:
                 icache.response_latency = 0
