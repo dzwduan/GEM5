@@ -274,6 +274,23 @@ LSQUnit::bankConflictReplayEvent::description() const
     return "bankConflictReplayEvent";
 }
 
+LSQUnit::tagReadFailReplayEvent::tagReadFailReplayEvent(LSQUnit *lsq_ptr)
+    : Event(Default_Pri, AutoDelete), lsqPtr(lsq_ptr)
+{
+}
+
+void
+LSQUnit::tagReadFailReplayEvent::process()
+{
+    lsqPtr->tagReadFailReplay();
+}
+
+const char *
+LSQUnit::tagReadFailReplayEvent::description() const
+{
+    return "tagReadFailReplayEvent";
+}
+
 bool
 LSQUnit::recvTimingResp(PacketPtr pkt)
 {
@@ -466,10 +483,23 @@ LSQUnit::bankConflictReplay()
 }
 
 void
+LSQUnit::tagReadFailReplay()
+{
+    iewStage->cacheUnblocked();
+}
+
+void
 LSQUnit::bankConflictReplaySchedule()
 {
     bankConflictReplayEvent *bk = new bankConflictReplayEvent(this);
     cpu->schedule(bk, cpu->clockEdge(Cycles(1)));
+}
+
+void
+LSQUnit::tagReadFailReplaySchedule()
+{
+    tagReadFailReplayEvent *e = new tagReadFailReplayEvent(this);
+    cpu->schedule(e, cpu->clockEdge(Cycles(1)));
 }
 
 void
@@ -1775,7 +1805,7 @@ LSQUnit::completeStore(typename StoreQueue::iterator store_idx, bool from_sbuffe
 }
 
 bool
-LSQUnit::trySendPacket(bool isLoad, PacketPtr data_pkt, bool &bank_conflict)
+LSQUnit::trySendPacket(bool isLoad, PacketPtr data_pkt, bool &bank_conflict, bool &tag_read_fail)
 {
     // sbuffer do not call this
     if (lsq->getLastConflictCheckTick() != curTick()) {
@@ -1804,7 +1834,10 @@ LSQUnit::trySendPacket(bool isLoad, PacketPtr data_pkt, bool &bank_conflict)
         }
         if (!bank_conflict && !dcachePort->sendTimingReq(data_pkt)) {
             ret = false;
-            cache_got_blocked = true;
+            tag_read_fail = data_pkt->tagReadFail;
+            if (!tag_read_fail) {
+                cache_got_blocked = true;
+            }
         }
     } else {
         ret = false;
@@ -1842,9 +1875,9 @@ LSQUnit::trySendPacket(bool isLoad, PacketPtr data_pkt, bool &bank_conflict)
     }
     DPRINTF(LSQUnit,
             "Memory request (pkt: %s) from inst [sn:%llu] was"
-            " %ssent (cache is blocked: %d, cache_got_blocked: %d, bank conflict: %d)\n",
+            " %ssent (cache is blocked: %d, cache_got_blocked: %d, bank conflict: %d, tag_read_fail: %d)\n",
             data_pkt->print(), request->instruction()->seqNum, ret ? "" : "not ", lsq->cacheBlocked(),
-            cache_got_blocked, bank_conflict);
+            cache_got_blocked, bank_conflict, tag_read_fail);
     return ret;
 }
 

@@ -87,6 +87,14 @@ enum PrefetchSourceType
     NUM_PF_SOURCES
 };
 
+enum DcacheRespType
+{
+    NONE = 0,
+    Hit,
+    Miss,
+    NUM_Resp_Type
+};
+
 /**
  * Special TaskIds that are used for per-context-switch stats dumps
  * and Cache Occupancy. Having too many tasks seems to be a problem
