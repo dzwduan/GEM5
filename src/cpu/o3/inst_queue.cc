@@ -706,13 +706,9 @@ InstructionQueue::scheduleReadyInsts()
             cpu->schedule(execution, cpu->clockEdge(Cycles(op_latency - 1))-1);
         }
         ++total_issued;
-#if TRACING_ON
-        issued_inst->issueTick = curTick() - issued_inst->fetchTick;
-#endif
         if (issued_inst->firstIssue == -1) {
             issued_inst->firstIssue = curTick();
         }
-
 
         iqStats.statIssuedInstType[issued_inst->threadNumber][issued_inst->opClass()]++;
     }

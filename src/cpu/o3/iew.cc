@@ -709,6 +709,12 @@ IEW::instToCommit(const DynInstPtr& inst)
         }
     }
 
+#if TRACING_ON
+    if (debug::O3PipeView) {
+        inst->completeTick = curTick() - inst->fetchTick;
+    }
+#endif
+
     scheduler->bypassWriteback(inst);
     inst->completionTick = curTick();
 
@@ -1049,7 +1055,7 @@ IEW::classifyInstToDispQue(ThreadID tid)
             cpu->hintDownStream->notifyIns(ins);
         }
         int id = dispClassify(inst);
-        if (dispQue[id].size() < dqSize) {
+        if (dispQue[id].size() < dqSize[id]) {
             if (inst->isSquashed()) {
                 ++iewStats.dispSquashedInsts;
                 //Tell Rename That An Instruction has been processed
@@ -1164,7 +1170,7 @@ IEW::dispatchInstFromDispQue(ThreadID tid)
 
     for (int i = 0; i < NumDQ; i++) {
         int dispatched = 0;
-        while (!dispQue[i].empty() && dispatched < dispWidth) {
+        while (!dispQue[i].empty() && dispatched < dispWidth[i]) {
             inst = dispQue[i].front();
 
             // Check for squashed instructions.
@@ -1785,12 +1791,6 @@ IEW::updateExeInstStats(const DynInstPtr& inst)
     ThreadID tid = inst->threadNumber;
 
     iewStats.executedInstStats.numInsts++;
-
-#if TRACING_ON
-    if (debug::O3PipeView) {
-        inst->completeTick = curTick() - inst->fetchTick;
-    }
-#endif
 
     //
     //  Control operations

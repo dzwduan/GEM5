@@ -132,7 +132,9 @@ class BaseO3CPU(BaseCPU):
                "Issue/Execute/Writeback delay")
     executeToWriteBackDelay = Param.Cycles(1, "Execute to issue delay")
 
-    dispWidth = Param.Unsigned(6, "Each DispQue dispatch width")
+    numDQEntries = VectorParam.Unsigned([32, 16, 16], "Number of entries in the dispQue, (Int, Float/Vector, Mem)")
+    dispWidth = VectorParam.Unsigned([8, 6, 6], "Each DispQue dispatch width")
+
     wbWidth = Param.Unsigned(20, "Writeback width")
 
     iewToCommitDelay = Param.Cycles(1, "Issue/Execute/Writeback to commit "
@@ -157,7 +159,7 @@ class BaseO3CPU(BaseCPU):
     SQEntries = Param.Unsigned(64, "Number of store queue entries")
 
     SbufferEntries = Param.Unsigned(16, "Number of store buffer entries")
-    SbufferEvictThreshold = Param.Unsigned(8, "store buffer eviction threshold")
+    SbufferEvictThreshold = Param.Unsigned(7, "store buffer eviction threshold")
     storeBufferInactiveThreshold = Param.Unsigned(800, "store buffer writeback timeout threshold")
 
     LSQDepCheckShift = Param.Unsigned(0,
@@ -190,7 +192,6 @@ class BaseO3CPU(BaseCPU):
     numPhysCCRegs = Param.Unsigned(0, "Number of physical cc registers")
     numPhysRMiscRegs = Param.Unsigned(40, "Number of physical renameable misc registers")
 
-    numDQEntries = Param.Unsigned(18, "Number of entries in the dispQue")
     numROBEntries = Param.Unsigned(320, "Number of reorder buffer entries")
 
     smtNumFetchingThreads = Param.Unsigned(1, "SMT Number of Fetching Threads")
@@ -210,7 +211,7 @@ class BaseO3CPU(BaseCPU):
                                        "Branch Predictor")
     needsTSO = Param.Bool(False, "Enable TSO Memory model")
 
-    scheduler = Param.Scheduler(KunminghuScheduler(), "")
+    scheduler = Param.Scheduler("")
 
     arch_db = Param.ArchDBer(Parent.any, "Arch DB")
 
