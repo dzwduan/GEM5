@@ -491,6 +491,8 @@ class CDP(QueuedPrefetcher):
         "16",
         "num of entries in vpnTable"
     )
+    vpn_reset_period = Param.Unsigned(128,
+        "reset vpn table after how many accesses")
     vpn_indexing_policy = Param.BaseIndexingPolicy(
         SetAssociative(
             entry_size=1,

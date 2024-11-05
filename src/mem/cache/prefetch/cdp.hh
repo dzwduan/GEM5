@@ -86,19 +86,25 @@ class CDP : public Queued
       private:
         u_int64_t refCnt;
         u_int64_t prevRefCnt;
+        uint64_t resetPeriod;
         bool exist;
         bool hot;
       public:
         uint64_t debug_vpn1{0};
         uint64_t debug_vpn2{0};
-        SubVpnEntry()
+        SubVpnEntry(uint64_t _rstPeriod)
             : refCnt(0),
               prevRefCnt(0),
+              resetPeriod(_rstPeriod),
               exist(false),
               hot(false)
         {}
-        void init(uint64_t _debug_vpn1, uint64_t _debug_vpn2) {
-            refCnt = 1;
+        void init(uint64_t _debug_vpn1, uint64_t _debug_vpn2, bool pf_hit_cdp) {
+            if (pf_hit_cdp) {
+                refCnt = 4;
+            } else {
+                refCnt = 1;
+            }
             prevRefCnt = 0;
             hot = false;
             exist = true;
@@ -113,32 +119,40 @@ class CDP : public Queued
             debug_vpn1 = 0;
             debug_vpn2 = 0;
         }
-        void access() {
-            refCnt++;
-        }
-        void decr() {
-            prevRefCnt = prevRefCnt == 0 ? 0 : (prevRefCnt - 1);
-            if (prevRefCnt == 0) {
-                hot = false;
+        void access(bool pf_hit_cdp) {
+            if (pf_hit_cdp) {
+                refCnt += 4;
+            } else {
+                refCnt++;
             }
         }
-        void periodReset(float throttle_aggressiveness, bool enable_thro, uint64_t resetPeriod) {
-            if (enable_thro) {
-                if (refCnt > (resetPeriod / 16)) {
-                    prevRefCnt = 0.2 * prevRefCnt + 0.8 * refCnt;
+        void updateHot(bool low_conf) {
+            if (low_conf) {
+                if (prevRefCnt > (resetPeriod / 16)) {
+                    hot = true;
                 } else {
-                    prevRefCnt = 0.2 * prevRefCnt;
+                    hot = false;
                 }
+            } else {
+                if (prevRefCnt > 2) {
+                    hot = true;
+                } else {
+                    hot = false;
+                }
+            }
+        }
+        void decr(bool low_conf) {
+            prevRefCnt = prevRefCnt == 0 ? 0 : (prevRefCnt - 1);
+            updateHot(low_conf);
+        }
+        void periodReset(float throttle_aggressiveness, bool enable_thro, bool low_conf) {
+            if (enable_thro) {
+                prevRefCnt = throttle_aggressiveness * refCnt;
             } else {
                 prevRefCnt = 0.2 * prevRefCnt + 0.8 * refCnt;
             }
 
-            if (prevRefCnt > 0) {
-                hot = true;
-            } else {
-                hot = false;
-            }
-
+            updateHot(low_conf);
             refCnt = 0;
         }
         bool getHot() { return hot; }
@@ -153,13 +167,15 @@ class CDP : public Queued
         std::vector<SubVpnEntry> subEntries;
         int subEntryNum;
         int subEntryBits;
+        uint64_t resetPeriod;
       public:
-        VpnEntry(int num)
+        VpnEntry(int num, uint64_t _rstPeriod)
             : TaggedEntry(),
-              subEntryNum(num)
+              subEntryNum(num),
+              resetPeriod(_rstPeriod)
         {
             for (int i = 0; i < subEntryNum; i++) {
-                subEntries.emplace_back(SubVpnEntry());
+                subEntries.emplace_back(SubVpnEntry(resetPeriod));
             }
             subEntryBits = ceil(log2(subEntryNum));
         }
@@ -168,21 +184,21 @@ class CDP : public Queued
                 subEntries[i].discard();
             }
         }
-        void init(uint64_t vpn1, uint64_t vpn2) {
+        void init(uint64_t vpn1, uint64_t vpn2, bool pf_hit_cdp) {
             uint64_t sub_idx = ((vpn2 << 9) | vpn1) & ((1UL << subEntryBits) - 1);
             assert(sub_idx < subEntryNum);
-            subEntries[sub_idx].init(vpn1, vpn2);
+            subEntries[sub_idx].init(vpn1, vpn2, pf_hit_cdp);
         }
-        void access(uint64_t idx) {
-            subEntries[idx].access();
+        void access(uint64_t idx, bool pf_hit_cdp) {
+            subEntries[idx].access(pf_hit_cdp);
         }
-        void decr(uint64_t idx) {
-            subEntries[idx].decr();
+        void decr(uint64_t idx, bool low_conf) {
+            subEntries[idx].decr(low_conf);
         }
-        void periodReset(float throttle_aggressiveness, bool enable_thro, uint64_t resetPeriod) {
+        void periodReset(float throttle_aggressiveness, bool enable_thro, bool low_conf) {
             for (int i = 0; i < subEntryNum; i++) {
                 if (subEntries[i].getExist()) {
-                    subEntries[i].periodReset(throttle_aggressiveness, enable_thro, resetPeriod);
+                    subEntries[i].periodReset(throttle_aggressiveness, enable_thro, low_conf);
                 }
             }
         }
@@ -206,16 +222,17 @@ class CDP : public Queued
 
         public:
             VpnTable(int assoc, int num_entries, BaseIndexingPolicy *idx_policy,
-            replacement_policy::Base *rpl_policy, int sub_entries, Entry const &init_val = Entry())
+            replacement_policy::Base *rpl_policy, int sub_entries,
+            uint64_t _rst_period, Entry const &init_val = Entry())
                 : table(assoc, num_entries, idx_policy, rpl_policy, init_val),
-                  _resetPeriod(128),
+                  _resetPeriod(_rst_period),
                   _resetCounter(0),
                   _subEntryNum(sub_entries)
             {
                 assert(_subEntryNum % 2 == 0 && _subEntryNum < 512);
                 _subEntryBits = ceil(log2(_subEntryNum));
             }
-            void add(int vpn2, int vpn1) {
+            void add(int vpn2, int vpn1, bool pf_hit_cdp) {
                 _resetCounter++;
                 Addr cat_addr = (vpn2 << 9) | vpn1;
                 uint64_t sub_idx = cat_addr & ((1UL << _subEntryBits) - 1);
@@ -226,25 +243,25 @@ class CDP : public Queued
                 if (entry) {
                     table.accessEntry(entry);
                     if (entry->getExist(sub_idx)) {
-                        entry->access(sub_idx);
+                        entry->access(sub_idx, pf_hit_cdp);
                     } else {
-                        entry->init(vpn1, vpn2);
+                        entry->init(vpn1, vpn2, pf_hit_cdp);
                     }
                 } else {
                     entry = table.findVictim(cat_addr);
                     entry->discard();
-                    entry->init(vpn1, vpn2);
+                    entry->init(vpn1, vpn2, pf_hit_cdp);
                     table.insertEntry(cat_addr, true, entry);
                 }
             }
-            void resetConfidence(float throttle_aggressiveness, bool enable_thro)
+            void resetConfidence(float throttle_aggressiveness, bool enable_thro, bool low_conf)
             {
                 if (_resetCounter < _resetPeriod)
                     return;
                 auto it = table.begin();
                 while (it != table.end()) {
                     if (it->isValid()) {
-                        it->periodReset(throttle_aggressiveness, enable_thro, _resetPeriod);
+                        it->periodReset(throttle_aggressiveness, enable_thro, low_conf);
                     }
                     it++;
                 }
@@ -269,7 +286,7 @@ class CDP : public Queued
                 }
                 return false;
             }
-            void update(int vpn2, int vpn1, bool enable_thro)
+            void update(int vpn2, int vpn1, bool enable_thro, bool low_conf)
             {
                 Addr cat_addr = (vpn2 << 9) | vpn1;
                 uint64_t sub_idx = cat_addr & ((1UL << _subEntryBits) - 1);
@@ -278,7 +295,7 @@ class CDP : public Queued
                 Entry *entry = table.findEntry(cat_addr, true);
                 if (entry && enable_thro) {
                     if (entry->getExist(sub_idx)) {
-                        entry->decr(sub_idx);
+                        entry->decr(sub_idx, low_conf);
                     }
                 }
             }
@@ -346,7 +363,7 @@ class CDP : public Queued
 
     void calculatePrefetch(const PrefetchInfo &pfi, std::vector<AddrPriority> &addresses) override;
 
-    void addToVpnTable(Addr vaddr);
+    void addToVpnTable(Addr vaddr, bool pf_hit_cdp);
 
     float getCdpTrueAccuracy() const {
         float trueAccuracy = 1;
@@ -355,6 +372,20 @@ class CDP : public Queued
                             (prefetchStatsPtr->pfIssued_srcs[PrefetchSourceType::CDP].value());
         }
         return trueAccuracy;
+    }
+
+    float getCdpTrueCoverage() const {
+        float trueCoverage = 1;
+        if (prefetchStatsPtr->pfUseful_srcs[PrefetchSourceType::CDP].value() > 100) {
+            trueCoverage = (prefetchStatsPtr->pfUseful_srcs[PrefetchSourceType::CDP].value() * 1.0) /
+                            (prefetchStatsPtr->pfUseful_srcs[PrefetchSourceType::CDP].value() + /
+                             prefetchStatsPtr->demandMshrMisses.value());
+        }
+        return trueCoverage;
+    }
+
+    bool isLowConfidence() const {
+        return (getCdpTrueAccuracy() < 0.25 && getCdpTrueCoverage() < 0.2);
     }
 
     std::vector<Addr> scanPointer(Addr addr, std::vector<uint64_t> addrs)
@@ -402,6 +433,7 @@ class CDP : public Queued
         statistics::Scalar dataNotifyNoVA;
         statistics::Scalar dataNotifyNoData;
         statistics::Scalar missNotifyCalled;
+        statistics::Scalar pfHitCDP;
         statistics::Scalar passedFilter;
         statistics::Scalar inserted;
     } cdpStats;

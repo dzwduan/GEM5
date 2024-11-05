@@ -697,12 +697,17 @@ Queued::offloadToDownStream()
     unsigned offloaded = 0;
     auto dpp_it = pfq.begin();
     while (offloaded < offloadBandwidth && dpp_it != pfq.end()) {
-        prefetchStats.pfOffloaded++;
-        assert(dpp_it->pkt != nullptr);
-        DPRINTF(HWPrefetch, "Offload prefetch for %#x.\n", dpp_it->pkt->getAddr());
-        // down stream must copy it instead of store its pointer
-        hintDownStream->rxHint(&(*dpp_it));
-        dpp_it = pfq.erase(dpp_it);
+        // we should not offload cdp prefetch request to lower caches
+        if (dpp_it->pfInfo.getXsMetadata().prefetchSource != PrefetchSourceType::CDP) {
+            prefetchStats.pfOffloaded++;
+            assert(dpp_it->pkt != nullptr);
+            DPRINTF(HWPrefetch, "Offload prefetch for %#x.\n", dpp_it->pkt->getAddr());
+            // down stream must copy it instead of store its pointer
+            hintDownStream->rxHint(&(*dpp_it));
+            dpp_it = pfq.erase(dpp_it);
+        } else {
+            dpp_it++;
+        }
     }
     DPRINTF(HWPrefetch, "Prefetch requests left in pfq: %lu, trans pfq: %lu\n", pfq.size(),
             pfqMissingTranslation.size());
