@@ -187,6 +187,7 @@ IssueQue::IssueQue(const IssueQueParams& params)
     }
 
     portBusy.resize(outports, 0);
+    opArb.resize(2, 0);
 }
 
 void
@@ -390,6 +391,9 @@ IssueQue::selectInst()
         }
         if (!readyQ->empty()) {
             auto inst = readyQ->top();
+            if (!opArb[pi] && opArb[pi] == scheduler->getOpLatency(inst)) {
+                continue;
+            }
             DPRINTF(Schedule, "[sn %ld] was selected\n", inst->seqNum);
 
             // get regfile read port
@@ -437,6 +441,9 @@ IssueQue::scheduleInst()
             inst->issueportid = pi;
             uint32_t lat = scheduler->getCorrectedOpLat(inst);
             scheduler->specWakeUpDependents(inst, this);
+            if (scheduler->getOpLatency(inst) > 1) {
+                opArb[pi] = scheduler->getOpLatency(inst);
+            }
         }
         inst->clearArbFailed();
     }
@@ -453,6 +460,9 @@ IssueQue::tick()
     instNumInsert = 0;
 
     for (auto& t : portBusy) {
+        t = t > 0 ? t - 1 : t;
+    }
+    for (auto& t : opArb) {
         t = t > 0 ? t - 1 : t;
     }
 

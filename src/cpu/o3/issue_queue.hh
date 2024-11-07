@@ -107,6 +107,7 @@ class IssueQue : public SimObject
     std::vector<std::vector<std::pair<int, int>>> intRfTPI;
     std::vector<std::vector<std::pair<int, int>>> fpRfTPI;
     std::vector<int> portBusy;
+    std::vector<int> opArb;
     // opclass mapping to pipeid
     std::vector<ReadyQue*> readyQclassify;
     // s0: wakeup inst, add ready inst to readyInstsQue
