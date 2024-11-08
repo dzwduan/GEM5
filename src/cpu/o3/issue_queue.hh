@@ -5,6 +5,8 @@
 #include <list>
 #include <string>
 
+#include <boost/compute/detail/lru_cache.hpp>
+#include <boost/dynamic_bitset/dynamic_bitset.hpp>
 #include <boost/heap/priority_queue.hpp>
 
 #include "base/statistics.hh"
@@ -12,6 +14,7 @@
 #include "cpu/inst_seq.hh"
 #include "cpu/o3/dyn_inst.hh"
 #include "cpu/o3/dyn_inst_ptr.hh"
+#include "cpu/reg_class.hh"
 #include "cpu/timebuf.hh"
 #include "params/IssuePort.hh"
 #include "params/IssueQue.hh"
@@ -50,14 +53,15 @@ class MemDepUnit;
  *                 |                    |
  *                 V                    |
  *              execute ----------------+
-*/
+ */
 
 class IssuePort : public SimObject
 {
   public:
+    std::vector<int> rp;  // [typeid, portid]
     std::vector<FUDesc*> fu;
     boost::dynamic_bitset<> mask;
-    IssuePort(const IssuePortParams &params);
+    IssuePort(const IssuePortParams& params);
 };
 
 class IssueQue : public SimObject
@@ -68,9 +72,10 @@ class IssueQue : public SimObject
     const int inports;
     const int outports;
     const int iqsize;
+    const int replayQsize = 32;
     const int scheduleToExecDelay;
     const std::string iqname;
-    std::vector<FUDesc *> fuDescs;
+    std::vector<FUDesc*> fuDescs;
     std::vector<bool> opPipelined;
     int IQID = -1;
 
@@ -96,8 +101,12 @@ class IssueQue : public SimObject
 
     std::list<DynInstPtr> instList;
     uint64_t instNumInsert = 0;
+    std::vector<int> opNum;
     uint64_t instNum = 0;
 
+    // issueport : regfileport : priority
+    std::vector<std::vector<std::pair<int, int>>> intRfTypePortId;
+    std::vector<std::vector<std::pair<int, int>>> fpRfTypePortId;
     std::vector<int> portBusy;
     // opclass mapping to pipeid
     std::vector<ReadyQue*> readyQclassify;
@@ -108,6 +117,8 @@ class IssueQue : public SimObject
 
     // srcIdx : inst
     std::vector<std::vector<std::pair<int, DynInstPtr>>> subDepGraph;
+
+    std::queue<DynInstPtr> replayQ;  // only for mem
 
     CPU* cpu = nullptr;
     Scheduler* scheduler = nullptr;
@@ -124,7 +135,7 @@ class IssueQue : public SimObject
         statistics::Vector portissued;
         statistics::Vector portBusy;
         statistics::Average avgInsts;
-    } *iqstats = nullptr;
+    }* iqstats = nullptr;
 
     void replay(const DynInstPtr& inst);
     void addToFu(const DynInstPtr& inst);
@@ -138,7 +149,7 @@ class IssueQue : public SimObject
   public:
     inline void clearBusy(uint32_t pi) { portBusy.at(pi) = 0; }
 
-    IssueQue(const IssueQueParams &params);
+    IssueQue(const IssueQueParams& params);
     void setIQID(int id) { IQID = id; }
     void setCPU(CPU* cpu);
     void resetDepGraph(int numPhysRegs);
@@ -152,6 +163,7 @@ class IssueQue : public SimObject
 
     void markMemDepDone(const DynInstPtr& inst);
     void retryMem(const DynInstPtr& inst);
+    bool idle();
 
     void doCommit(const InstSeqNum inst);
     void doSquash(const InstSeqNum seqNum);
@@ -170,10 +182,9 @@ class SpecWakeupChannel : public SimObject
     std::string srcIQ;
     std::vector<std::string> dstIQ;
     SpecWakeupChannel(const SpecWakeupChannelParams& params)
-      : SimObject(params),
-        srcIQ(params.srcIQ),
-        dstIQ(params.dstIQ)
-    { }
+        : SimObject(params), srcIQ(params.srcIQ), dstIQ(params.dstIQ)
+    {
+    }
 };
 
 class Scheduler : public SimObject
@@ -183,17 +194,20 @@ class Scheduler : public SimObject
     {
         DynInstPtr inst;
         IssueQue* to_issue_queue = nullptr;
+
       public:
         SpecWakeupCompletion(const DynInstPtr& inst, IssueQue* to);
         void process() override;
-        const char *description() const override;
+        const char* description() const override;
     };
 
     CPU* cpu;
-    MemDepUnit *memDepUnit;
+    MemDepUnit* memDepUnit;
 
     struct disp_policy
     {
+        OpClass disp_op;
+        disp_policy(OpClass op) : disp_op(op) {}
         bool operator()(IssueQue* a, IssueQue* b) const;
     };
     using DispPolicy = std::vector<IssueQue*>;
@@ -204,6 +218,7 @@ class Scheduler : public SimObject
     std::vector<IssueQue*> issueQues;
     std::vector<std::vector<IssueQue*>> wakeMatrix;
     uint32_t combinedFus;
+    int rfMaxTypePortId;
 
     std::vector<DynInstPtr> instsToFu;
 
@@ -211,27 +226,16 @@ class Scheduler : public SimObject
     std::vector<bool> bypassScoreboard;
     std::vector<bool> scoreboard;
 
-    struct Slot
-    {
-        uint32_t priority;// smaller is lower priority
-        uint32_t resourceDemand;
-        DynInstPtr inst;
-        Slot(uint32_t priority, uint32_t demand, const DynInstPtr& inst);
-    };
-    struct slot_policy
-    {
-        bool operator()(const Slot& a, const Slot& b) const;
-    };
-    using SlotQue = boost::heap::priority_queue<Slot, boost::heap::compare<slot_policy>>;
 
-    const uint32_t intSlotNum;
-    const uint32_t fpSlotNum;
-    uint32_t intSlotOccupied = 0;
-    uint32_t fpSlotOccupied = 0;
-    // interger slot
-    SlotQue intSlot;
-    // floating point slot
-    SlotQue fpSlot;
+    // typePortId : [inst : priority]
+    std::vector<std::pair<DynInstPtr, int>> rfPortOccupancy;
+    std::vector<DynInstPtr> arbFailedInsts;
+
+    struct NullStruct {};
+
+    // regcache only for integer
+    boost::compute::detail::lru_cache<int, NullStruct> regCache =
+        boost::compute::detail::lru_cache<int, NullStruct>(24);
 
     // used for searching dependency chain
     std::stack<DynInstPtr> dfs;
@@ -243,7 +247,7 @@ class Scheduler : public SimObject
     Scheduler(const SchedulerParams& params);
     void setCPU(CPU* cpu);
     void resetDepGraph(uint64_t numPhysRegs);
-    void setMemDepUnit(MemDepUnit *memDepUnit) { this->memDepUnit = memDepUnit; }
+    void setMemDepUnit(MemDepUnit* memDepUnit) { this->memDepUnit = memDepUnit; }
 
     void tick();
     void issueAndSelect();
@@ -258,14 +262,14 @@ class Scheduler : public SimObject
     void addToFU(const DynInstPtr& inst);
     DynInstPtr getInstToFU();
 
-    void insertSlot(const DynInstPtr& inst);
+    bool checkRfPortBusy(int typePortId, int pri);
+    void useRegfilePort(const DynInstPtr& inst, const PhysRegIdPtr& regid, int typePortId, int pri);
 
     void loadCancel(const DynInstPtr& inst);
 
     void writebackWakeup(const DynInstPtr& inst);
     void bypassWriteback(const DynInstPtr& inst);
 
-    uint32_t getArbPriority(const DynInstPtr& inst);
     uint32_t getOpLatency(const DynInstPtr& inst);
     uint32_t getCorrectedOpLat(const DynInstPtr& inst);
     bool hasReadyInsts();
@@ -276,7 +280,7 @@ class Scheduler : public SimObject
 };
 
 
-} // namespace o3
-} // namespace gem5
+}  // namespace o3
+}  // namespace gem5
 
-#endif //__CPU_O3_INST_QUEUE_HH__
+#endif  //__CPU_O3_INST_QUEUE_HH__

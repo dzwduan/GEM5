@@ -133,7 +133,7 @@ class IEW
 
   private:
 
-    const unsigned dqSize;
+    std::vector<uint32_t> dqSize;
 
     /** Overall stage status. */
     Status _status;
@@ -405,7 +405,7 @@ class IEW
     /** Load / store queue. */
     LSQ ldstQueue;
 
-    const uint32_t dispWidth;
+    std::vector<uint32_t> dispWidth;
 
     /** Records if the LSQ needs to be updated on the next cycle, so that
      * IEW knows if there will be activity on the next cycle.

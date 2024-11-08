@@ -22,6 +22,42 @@ from common import ObjectList
 from common import XSConfig
 from common.Caches import *
 from common import Options
+from common.FUScheduler import *
+
+class XiangshanCore(RiscvO3CPU):
+    scheduler = KunminghuScheduler()
+
+class XiangshanECore(XiangshanCore):
+    fetchWidth = 8
+    decodeWidth = 4
+    renameWidth = 4
+
+    numROBEntries = 150
+    LQEntries = 48
+    SQEntries = 32
+    numPhysIntRegs = 108
+    numPhysFloatRegs = 112
+    numPhysVecRegs = 112
+    numPhysVecPredRegs = 36
+    numPhysCCRegs = 0
+    numPhysRMiscRegs = 40
+    scheduler = ECoreScheduler()
+
+class XiangshanECore2Read(XiangshanCore):
+    fetchWidth = 8
+    decodeWidth = 4
+    renameWidth = 4
+
+    numROBEntries = 150
+    LQEntries = 48
+    SQEntries = 32
+    numPhysIntRegs = 108
+    numPhysFloatRegs = 112
+    numPhysVecRegs = 112
+    numPhysVecPredRegs = 36
+    numPhysCCRegs = 0
+    numPhysRMiscRegs = 40
+    scheduler = ECore2ReadScheduler()
 
 def build_test_system(np, args):
     assert buildEnv['TARGET_ISA'] == "riscv"

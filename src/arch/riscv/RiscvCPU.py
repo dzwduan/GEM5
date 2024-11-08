@@ -54,38 +54,3 @@ class RiscvO3CPU(BaseO3CPU, RiscvCPU):
 
 class RiscvMinorCPU(BaseMinorCPU, RiscvCPU):
     mmu = RiscvMMU()
-
-class XiangshanCore(RiscvO3CPU):
-    scheduler = KunminghuScheduler()
-
-class XiangshanECore(XiangshanCore):
-    fetchWidth = 8
-    decodeWidth = 4
-    renameWidth = 4
-
-    numROBEntries = 150
-    LQEntries = 48
-    SQEntries = 32
-    numPhysIntRegs = 108
-    numPhysFloatRegs = 112
-    numPhysVecRegs = 112
-    numPhysVecPredRegs = 36
-    numPhysCCRegs = 0
-    numPhysRMiscRegs = 40
-    scheduler = ECoreScheduler()
-
-class XiangshanECore2Read(XiangshanCore):
-    fetchWidth = 8
-    decodeWidth = 4
-    renameWidth = 4
-
-    numROBEntries = 150
-    LQEntries = 48
-    SQEntries = 32
-    numPhysIntRegs = 108
-    numPhysFloatRegs = 112
-    numPhysVecRegs = 112
-    numPhysVecPredRegs = 36
-    numPhysCCRegs = 0
-    numPhysRMiscRegs = 40
-    scheduler = ECore2ReadScheduler()
