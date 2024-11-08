@@ -2000,6 +2000,13 @@ BaseCache::allocateBlock(const PacketPtr pkt, PacketList &writebacks)
 void
 BaseCache::invalidateBlock(CacheBlk *blk)
 {
+    static uint64_t _inval_cnt{0};
+    // notify prefetcher to send some info to lower level per 128 cache invalidations
+    if ((_inval_cnt++ % 128) == 127) {
+        if (prefetcher) {
+            prefetcher->sendCustomInfoToDownStream();
+        }
+    }
     // If block is still marked as prefetched, then it hasn't been used
     if (blk->wasPrefetched()) {
         prefetcher->prefetchUnused(blk->getXsMetadata().prefetchSource);

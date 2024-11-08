@@ -331,12 +331,22 @@ class CDP : public Queued
     RequestorID parentRid;
     std::pair<long, long> l3_miss_info;  // (cdp_l3_miss,l3_total_miss_num)
     float mpki = 1;
+    float rivalCoverage = 1;
+    // hyperparameters: Coverage & Accuracy Threshold
+    const float Tcoverage = 0.2;
+    const float Alow = 0.25;
+    const float Ahigh = 0.5;
+    const float RivalTcoverage = 0.5;
+
     void setStatsPtr(StatGroup *ptr) { prefetchStatsPtr = ptr; }
     void notifyIns(int ins_num) override
     {
         if (l3_miss_info.second != 0) {
             mpki = l3_miss_info.second * 1000.0 / ins_num;
         }
+    }
+    void recvCustomInfoFrmUpStream(CustomPfInfo& info) {
+        rivalCoverage = info.coverage;
     }
     bool sendPFWithFilter(Addr addr, std::vector<AddrPriority> &addresses, int prio, PrefetchSourceType pfSource,
                           int pf_depth);
@@ -378,14 +388,42 @@ class CDP : public Queued
         float trueCoverage = 1;
         if (prefetchStatsPtr->pfUseful_srcs[PrefetchSourceType::CDP].value() > 100) {
             trueCoverage = (prefetchStatsPtr->pfUseful_srcs[PrefetchSourceType::CDP].value() * 1.0) /
-                            (prefetchStatsPtr->pfUseful_srcs[PrefetchSourceType::CDP].value() + /
-                             prefetchStatsPtr->demandMshrMisses.value());
+                            (prefetchStatsPtr->pfUseful_srcs[PrefetchSourceType::CDP].value() +
+                                prefetchStatsPtr->demandMshrMisses.value());
         }
         return trueCoverage;
     }
 
     bool isLowConfidence() const {
-        return (getCdpTrueAccuracy() < 0.25 && getCdpTrueCoverage() < 0.2);
+        static bool lowConf{false};
+        float cdpAccuracy = getCdpTrueAccuracy();
+        float cdpCoverage = getCdpTrueCoverage();
+        int throAction{0};
+
+        if (cdpCoverage >= Tcoverage) {
+            throAction = 0;
+            lowConf = false;
+        } else if (cdpAccuracy < Alow) {
+            throAction = 1;
+            lowConf = true;
+        } else if (cdpAccuracy < Ahigh) {
+            if (rivalCoverage >= RivalTcoverage) {
+                throAction = 2;
+                lowConf = true;
+            } else {
+                throAction = 3;
+                lowConf = false;
+            }
+        } else if (cdpAccuracy >= Ahigh) {
+            if (rivalCoverage < RivalTcoverage) {
+                throAction = 4;
+                lowConf = false;
+            } else {
+                throAction = 5;
+            }
+        }
+        cdpStats.ThrottlingActionDist.sample(throAction);
+        return lowConf;
     }
 
     std::vector<Addr> scanPointer(Addr addr, std::vector<uint64_t> addrs)
@@ -423,6 +461,7 @@ class CDP : public Queued
     {
         CDPStats(statistics::Group *parent);
         // STATS
+        mutable statistics::Distribution ThrottlingActionDist;
         statistics::Scalar triggeredInRxNotify;
         statistics::Scalar triggeredInCalcPf;
         statistics::Scalar dataNotifyCalled;

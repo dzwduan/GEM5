@@ -33,6 +33,8 @@ class L2CompositeWithWorkerPrefetcher : public CompositeWithWorkerPrefetcher
 
     void notify(const PacketPtr &pkt, const PrefetchInfo &pfi) override;
 
+    void recvCustomInfoFrmUpStream(CustomPfInfo& info) override;
+
     void notifyFill(const PacketPtr &pkt) override;
     void notifyIns(int ins_num) override { cdp->notifyIns(ins_num); }
 

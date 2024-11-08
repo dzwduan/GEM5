@@ -54,7 +54,7 @@ namespace prefetch
 {
 CDP::CDP(const CDPParams &p)
     : Queued(p),
-      depth_threshold(3),
+      depth_threshold(2),
       degree(2),
       throttle_aggressiveness(p.throttle_aggressiveness),
       enable_thro(false),
@@ -74,6 +74,8 @@ CDP::CDP(const CDPParams &p)
 
 CDP::CDPStats::CDPStats(statistics::Group *parent)
     : statistics::Group(parent),
+      ADD_STAT(ThrottlingActionDist, statistics::units::Count::get(),
+               "Distribution of Throttling Action"),
       ADD_STAT(triggeredInRxNotify, statistics::units::Count::get(),
                "Number of times the prefetcher was triggered in rxNotify"),
       ADD_STAT(triggeredInCalcPf, statistics::units::Count::get(),
@@ -99,6 +101,7 @@ CDP::CDPStats::CDPStats(statistics::Group *parent)
       ADD_STAT(passedFilter, statistics::units::Count::get(), "Number of prefetch requests passed the filter"),
       ADD_STAT(inserted, statistics::units::Count::get(), "Number of prefetches inserted")
 {
+    ThrottlingActionDist.init(0, 5, 1).flags(statistics::nozero);
 }
 
 void

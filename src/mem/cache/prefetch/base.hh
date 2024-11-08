@@ -69,6 +69,11 @@ GEM5_DEPRECATED_NAMESPACE(Prefetcher, prefetch);
 namespace prefetch
 {
 
+struct CustomPfInfo
+{
+    float coverage;
+};
+
 class Base : public ClockedObject
 {
     class PrefetchListener : public ProbeListenerArgBase<PacketPtr>
@@ -574,6 +579,23 @@ class Base : public ClockedObject
     {
         return hintDownStream != nullptr;
     }
+
+    virtual void sendCustomInfoToDownStream()
+    {
+        // construct the custom info
+        // just send prefetch coverage of this level for now.
+        float coverage = 1;
+        if (prefetchStats.demandMshrMisses.value() > 0) {
+            coverage = (prefetchStats.pfUseful.value() * 1.0) /
+                        (prefetchStats.pfUseful.value() + prefetchStats.demandMshrMisses.value());
+        }
+        CustomPfInfo info{coverage};
+        if (hasHintDownStream()) {
+            hintDownStream->recvCustomInfoFrmUpStream(info);
+        }
+    }
+
+    virtual void recvCustomInfoFrmUpStream(CustomPfInfo& info) {}
 
     virtual void offloadToDownStream() { panic("offloadToDownStream() not implemented"); }
 
