@@ -864,34 +864,27 @@ TLB::demapPageL2(Addr vpn, uint64_t asid)
 
     if (vpn != 0 && asid != 0) {
         if (isStage2 || isTheSharedL2) {
-            for (int i_type = 0; i_type < L2PageTypeNum; i_type++) {
-                for (i = 0; i < l2TlbSize[i_type] * l2tlbLineSize; i = i + l2tlbLineSize) {
-                    if ((l2Tlb[i_type] + i)->trieHandle) {
-                        l2TLBRemove(i, i_type + 1);
-                    }
+            for (i = 1; i < 6; i++) {
+                int tlb_i = 0;
+                if (i - 1 > 3)
+                    tlb_i = 3;
+                else
+                    tlb_i = i - 1;
+                if (l2_newEntry[i]) {
+                    TlbEntry *m_newEntry = lookupL2TLB(vpn_vec[i - 1], asid, BaseMMU::Read, true, i, false, direct);
+                    assert(m_newEntry != nullptr);
+                    l2TLBRemove(m_newEntry - l2Tlb[tlb_i], i);
                 }
-            }
-        }
-        for (i = 1; i < 6; i++) {
-            int tlb_i = 0;
-            if (i - 1 > 3)
-                tlb_i = 3;
-            else
-                tlb_i = i - 1;
-            if (l2_newEntry[i]) {
-                TlbEntry *m_newEntry = lookupL2TLB(vpn_vec[i - 1], asid, BaseMMU::Read, true, i, false, direct);
-                assert(m_newEntry != nullptr);
-                l2TLBRemove(m_newEntry - l2Tlb[tlb_i], i);
-            }
-            if (l2_newEntry1[i]) {
-                TlbEntry *m_newEntry = lookupL2TLB(vpn_vec[i - 1], asid, BaseMMU::Read, true, i, true, gstage);
-                assert(m_newEntry != nullptr);
-                l2TLBRemove(m_newEntry - l2Tlb[tlb_i], i);
-            }
-            if (l2_newEntry2[i]) {
-                TlbEntry *m_newEntry = lookupL2TLB(vpn_vec[i - 1], asid, BaseMMU::Read, true, i, true, vsstage);
-                assert(m_newEntry != nullptr);
-                l2TLBRemove(m_newEntry - l2Tlb[tlb_i], i);
+                if (l2_newEntry1[i]) {
+                    TlbEntry *m_newEntry = lookupL2TLB(vpn_vec[i - 1], asid, BaseMMU::Read, true, i, true, gstage);
+                    assert(m_newEntry != nullptr);
+                    l2TLBRemove(m_newEntry - l2Tlb[tlb_i], i);
+                }
+                if (l2_newEntry2[i]) {
+                    TlbEntry *m_newEntry = lookupL2TLB(vpn_vec[i - 1], asid, BaseMMU::Read, true, i, true, vsstage);
+                    assert(m_newEntry != nullptr);
+                    l2TLBRemove(m_newEntry - l2Tlb[tlb_i], i);
+                }
             }
         }
     } else {
